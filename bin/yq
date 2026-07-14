@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+import os
+import re
+import subprocess
+import sys
+
+SYSTEM_YQ = "/usr/bin/yq"
+
+
+def translate_expr(expr: str, mode: str) -> str:
+    expr = expr.replace('env(PFX)', 'env.PFX')
+    expr = expr.replace('env(domain)', 'env.domain')
+    if mode == 'inplace' and expr.startswith('.services.*.networks = '):
+        value = expr.split('=', 1)[1].strip()
+        return f'.services |= with_entries(.value.networks = {value})'
+    return expr
+
+
+def run_system_yq(args):
+    result = subprocess.run([SYSTEM_YQ, *args])
+    sys.exit(result.returncode)
+
+
+def main():
+    argv = sys.argv[1:]
+    if not argv:
+        print('usage: yq [eval|ea] ...', file=sys.stderr)
+        sys.exit(1)
+
+    if argv[0] in ('--version', '-V', 'version'):
+        print('yq (project wrapper, mikefarah-compatible subset)')
+        sys.exit(0)
+
+    if argv[0] == 'eval':
+        if len(argv) < 2:
+            print('yq eval requires an expression', file=sys.stderr)
+            sys.exit(1)
+        expr = translate_expr(argv[1], 'eval')
+        files = argv[2:]
+        run_system_yq(['-y', expr, *files])
+
+    if argv[0] == 'ea':
+        if len(argv) < 2:
+            print('yq ea requires an expression', file=sys.stderr)
+            sys.exit(1)
+        expr = argv[1].strip()
+        files = argv[2:]
+        if expr == '. as $item ireduce ({}; . * $item)':
+            run_system_yq(['-y', '-s', 'reduce .[] as $item ({}; . * $item)', *files])
+        if expr.startswith('. as $cfg ireduce ({}; {'):
+            legacy_filter = '''reduce .[] as $cfg ({}; {
+  network: ($cfg.network // {}),
+  ordererOrg: ($cfg.ordererOrg // {}),
+  peerOrgs: ($cfg.peerOrgs // []),
+  channels: (
+    if $cfg.channels then $cfg.channels
+    else [
+      {
+        name: "mychannel",
+        profile: "ThreeOrgsChannel",
+        consortium: "SampleConsortium",
+        memberOrgs: (($cfg.peerOrgs // []) | map(.name))
+      }
+    ] end
+  ),
+  profiles: ($cfg.profiles // {
+    genesis: "ThreeOrgsOrdererGenesis"
+  })
+})'''
+            run_system_yq(['-y', '-s', legacy_filter, *files])
+        print(f'unsupported yq ea expression: {expr}', file=sys.stderr)
+        sys.exit(2)
+
+    if argv[0] == '-i':
+        if len(argv) < 3:
+            print('yq -i requires an expression and file', file=sys.stderr)
+            sys.exit(1)
+        expr = translate_expr(argv[1], 'inplace')
+        files = argv[2:]
+        run_system_yq(['-y', '--in-place', expr, *files])
+
+    if argv[0] == '-r':
+        if len(argv) < 2:
+            print('yq -r requires an expression', file=sys.stderr)
+            sys.exit(1)
+        expr = translate_expr(argv[1], 'raw')
+        files = argv[2:]
+        run_system_yq(['-r', expr, *files])
+
+    expr = translate_expr(argv[0], 'default')
+    files = argv[1:]
+    run_system_yq(['-y', expr, *files])
+
+
+if __name__ == '__main__':
+    main()

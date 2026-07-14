@@ -1,0 +1,15 @@
+# Minimal core.yaml to avoid CLI error
+logging:
+  level: info
+
+peer:
+  id: peer0
+  networkId: dev
+  address: 0.0.0.0:7051
+  listenAddress: 0.0.0.0:7051
+
+vm:
+  endpoint: unix:///host/var/run/docker.sock
+  docker:
+    tls:
+      enabled: false

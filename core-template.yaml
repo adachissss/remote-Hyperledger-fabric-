@@ -1,0 +1,179 @@
+peer:
+  id: {{PEER_ID}}
+  networkId: {{NETWORK_ID}}
+  address: 0.0.0.0:{{PEER_PORT}}
+  listenAddress: 0.0.0.0:{{PEER_PORT}}
+  chaincodeAddress: {{PEER_ID}}:{{CHAINCODE_PORT}}
+  chaincodeListenAddress: 0.0.0.0:{{CHAINCODE_PORT}}
+  localMspId: {{MSP_ID}}
+  mspConfigPath: /etc/hyperledger/fabric/peers/{{PEER_ID}}/msp
+
+  tls:
+    enabled: true
+    cert:
+      file: {{TLS_CERT_PATH}}
+    key:
+      file: {{TLS_KEY_PATH}}
+    rootcert:
+      file: {{TLS_CA_PATH}}
+    clientAuthRequired: false  # 改为 false，与 Docker Compose 一致
+    clientRootCAs:
+      files:
+        - {{TLS_CA_PATH}}
+
+  gossip:
+    bootstrap: {{GOSSIP_BOOTSTRAP}}
+    endpoint: {{PEER_ENDPOINT}}
+    externalEndpoint: {{PEER_EXTERNAL}}
+    useLeaderElection: true
+    orgLeader: false
+
+  deliveryclient:
+    connTimeout: 3s
+    reconnectTotalTimeThreshold: 3600s
+
+# ========== 关键修复：添加链码配置部分 ==========
+chaincode:
+  # 链码 ID 长度限制
+  id:
+    name: ""
+    path: ""
+
+  # 链码构建器配置
+  builder: hyperledger/fabric-ccenv:2.4
+
+  # 链码运行时镜像
+  golang:
+    runtime: hyperledger/fabric-baseos:2.4
+  java:
+    runtime: hyperledger/fabric-javaenv:2.4
+  node:
+    runtime: hyperledger/fabric-nodeenv:2.4
+
+  # 外部构建器配置
+  externalBuilders: []
+
+  # 链码安装超时
+  installTimeout: 300s
+
+  # 链码启动超时
+  startupTimeout: 300s
+
+  # 链码执行超时
+  executeTimeout: 300s
+
+  # 链码模式
+  mode: net
+
+  # 链码保持连接
+  keepalive: 0
+
+  # 系统链码配置（关键）
+  system:
+    cscc: enable
+    lscc: enable
+    escc: enable
+    vscc: enable
+    qscc: enable
+
+  # 链码日志配置
+  logging:
+    level: INFO
+    shim: INFO
+    format: '%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}'
+
+# VM 配置部分
+vm:
+  endpoint: unix:///var/run/docker.sock
+  docker:
+    tls:
+      enabled: false
+    attachStdout: false
+
+    # 容器主机配置
+    hostConfig:
+      NetworkMode: fabric_net
+      Dns: []
+      DnsSearch: []
+      ExtraHosts: []
+      VolumesFrom: []
+      CapAdd: []
+      CapDrop: []
+      Privileged: false
+      PublishAllPorts: false
+      ReadonlyRootfs: false
+      SecurityOpt: []
+      CgroupParent: ""
+      Memory: 2147483648  # 2GB
+      MemorySwap: 0
+      MemoryReservation: 0
+      KernelMemory: 0
+      CpuShares: 0
+      CpuSet: ""
+      CpuSetMems: ""
+      CpuQuota: 0
+      CpuPeriod: 0
+      BlkioWeight: 0
+      BlkioWeightDevice: []
+      BlkioDeviceReadBps: []
+      BlkioDeviceWriteBps: []
+      BlkioDeviceReadIOps: []
+      BlkioDeviceWriteIOps: []
+      OomKillDisable: false
+      PidsLimit: 4096
+      Ulimits:
+        - Name: "nofile"
+          Soft: 65536
+          Hard: 65536
+
+# BCCSP 配置
+bccsp:
+  default: SW
+  sw:
+    hash: SHA2
+    security: 256
+    filekeystore:
+      keystore: /var/hyperledger/production/msp/keystore
+
+# Ledger 配置
+ledger:
+  blockchain:
+  state:
+    stateDatabase: goleveldb
+    totalQueryLimit: 100000
+    couchDBConfig:
+      couchDBAddress: 127.0.0.1:5984
+      username: ""
+      password: ""
+      maxRetries: 3
+      maxRetriesOnStartup: 12
+      requestTimeout: 35s
+      internalQueryLimit: 1000
+      maxBatchUpdateSize: 1000
+      warmIndexesAfterNBlocks: 1
+      createGlobalChangesDB: false
+      cacheSize: 64
+  history:
+    enableHistoryDatabase: true
+  pvtdataStore:
+    collElgProcMaxDbBatchSize: 5000
+    collElgProcDbBatchesInterval: 1000
+    purgeInterval: 100
+    deprioritizedDataReconcilerInterval: 60m
+  snapshots:
+    rootDir: {{SNAPSHOT_ROOT_DIR}}
+
+# Operations 配置
+operations:
+  listenAddress: 0.0.0.0:{{OPS_PORT}}
+  tls:
+    enabled: false
+
+# Metrics 配置
+metrics:
+  provider: prometheus
+  statsd:
+    network: udp
+    address: 127.0.0.1:8125
+    writeInterval: 10s
+    prefix: ""

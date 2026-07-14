@@ -1,0 +1,75 @@
+# Local-development example. Copy this file to config/orgs.yaml and replace
+# every change-me password before creating a network outside an isolated host.
+network:
+  domain: example.com
+  tls_enabled: true
+  aggregate_all_tls_roots: true
+  name: AdaNet
+  id: AdaNet-001
+  env_prefix: ADANET
+  network_port__start: 0
+
+ordererOrg:
+  mspid: OrdererMSP
+  domain: example.com
+  ca_url: https://localhost:10054
+  ca_name: ca-orderer
+  ca_tls_cert: organizations/fabric-ca/ca-orderer/ca-cert.pem
+  nodes:
+    - name: orderer1
+      host: orderer1.example.com
+      port: 7050
+    - name: orderer2
+      host: orderer2.example.com
+      port: 8050
+    - name: orderer3
+      host: orderer3.example.com
+      port: 9050
+  admin_password: change-me-orderer
+
+peerOrgs:
+  - name: org1
+    mspid: Org1MSP
+    domain: org1.example.com
+    ca_url: https://localhost:7054
+    ca_name: ca-org1
+    ca_tls_cert: organizations/fabric-ca/org1/ca-cert.pem
+    peer_count: 1
+    anchor_peers:
+      - host: ADANET-peer0.org1.example.com
+        port: 7051
+    admin_password: change-me-org1
+  - name: org2
+    mspid: Org2MSP
+    domain: org2.example.com
+    ca_url: https://localhost:8054
+    ca_name: ca-org2
+    ca_tls_cert: organizations/fabric-ca/org2/ca-cert.pem
+    peer_count: 1
+    anchor_peers:
+      - host: ADANET-peer0.org2.example.com
+        port: 7151
+    admin_password: change-me-org2
+  - name: org3
+    mspid: Org3MSP
+    domain: org3.example.com
+    ca_url: https://localhost:9054
+    ca_name: ca-org3
+    ca_tls_cert: organizations/fabric-ca/org3/ca-cert.pem
+    peer_count: 1
+    anchor_peers:
+      - host: ADANET-peer0.org3.example.com
+        port: 7251
+    admin_password: change-me-org3
+
+channels:
+  - name: mychannel
+    profile: ThreeOrgsChannel
+    consortium: SampleConsortium
+    memberOrgs:
+      - org1
+      - org2
+      - org3
+
+profiles:
+  genesis: ThreeOrgsOrdererGenesis

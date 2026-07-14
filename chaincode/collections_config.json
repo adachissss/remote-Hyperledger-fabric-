@@ -1,0 +1,14 @@
+[
+  {
+    "name": "rsAssetPrivateDataCollection",
+    "policy": "OR('Org1MSP.member', 'Org2MSP.member')",
+    "endorsementPolicy": {
+      "signaturePolicy": "AND('Org1MSP.member', 'Org2MSP.member')"
+    },
+    "requiredPeerCount": 1,
+    "maxPeerCount": 2,
+    "blockToLive": 1000000,
+    "memberOnlyRead": true,
+    "memberOnlyWrite": true
+  }
+]

@@ -1,0 +1,55 @@
+# Node.js dependencies and test output
+**/node_modules/
+coverage/
+.nyc_output/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Downloaded third-party Fabric binaries. Keep the project yq wrapper.
+/bin/*
+!/bin/yq
+
+# Local Fabric topology and overrides may contain credentials.
+/config/orgs.yaml
+/config/local.override.yaml
+
+# Generated Fabric network configuration and runtime state.
+/config/configtx.yaml
+/config/odererYAml/
+/docker/docker-compose-*.yaml
+/organizations/
+/channel-artifacts/
+/org*-connection.json
+/script/core.yaml
+
+# Chaincode packages and other generated archives.
+*.tar.gz
+*.block
+*.tx
+
+# Fabric identities, private keys, and CA databases (defence in depth).
+*.pem
+*.crt
+*.key
+*_sk
+**/keystore/
+**/fabric-ca-server.db
+**/IssuerSecretKey
+**/IssuerRevocationPrivateKey
+wallet/
+
+# Local configuration and backup files.
+.env
+.env.*
+!.env.example
+*.bak
+*.bk
+/history/
+
+# Editor and OS metadata.
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
