@@ -21,12 +21,13 @@
 - [x] SQLite 持久化空网络注册表，不自动注入默认实例；
 - [x] 从管理员允许的服务端工作区导入多个网络；
 - [ ] 创建由平台管理的网络；
-- [ ] 所有 API 和路由以 `networkId` 为第一维；
+- [x] 网络配置、拓扑和节点 API/路由以 `networkId` 为第一维；
 - [x] 解析每个网络脱敏后的配置；
 - [ ] 封装 `export-network-info.sh`；
-- [ ] Docker 容器状态、镜像、IP、端口和时间；
-- [ ] Fleet Overview、Network Selector、Topology、Nodes、Configuration 页面；
-- [ ] 定时刷新和错误降级展示。
+- [x] Docker 容器状态、镜像、IP、端口和时间；
+- [x] Fleet Overview、URL 驱动的 Network Selector、Topology 和 Nodes 页面；
+- [ ] Configuration 页面；
+- [x] 定时刷新和错误降级展示。
 
 验收：至少两个名称和拓扑不同的网络可以同时注册；停止和运行状态均能正确展示，不串用配置、容器或凭据，也不返回密码和私钥。
 

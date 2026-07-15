@@ -153,6 +153,8 @@ interface NetworkDriver {
 - `fabricReady`：能够完成 Fabric 级查询；
 - `degradedReason`：明确说明失败层级。
 
+当前只读观测阶段已实现 `configured` 和 `containerRunning`，并返回经过白名单筛选的容器状态、健康、镜像、IP、端口和时间。`serviceReachable` 与 `fabricReady` 在 API 中明确返回 `null`，待后续加入 gRPC、CA 和 Fabric 级探测后再赋值，不用容器运行状态冒充 Fabric 就绪状态。
+
 ### 6.3 Job Service
 
 网络部署和链码生命周期都是长任务：

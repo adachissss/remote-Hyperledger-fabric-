@@ -2,7 +2,8 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, Boxes, Plus, ShieldAlert, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, Boxes, Plus, ShieldAlert, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { ControlPlaneApiError, getNetworks, importNetwork } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
@@ -207,6 +208,14 @@ export function NetworksPage() {
                   </div>
                 </dl>
                 <span className="network-row__runtime">{network.status}</span>
+                <Link
+                  className="network-row__open icon-button"
+                  to={`/networks/${encodeURIComponent(network.id)}/topology`}
+                  aria-label={`Open ${network.displayName}`}
+                  title="Open network"
+                >
+                  <ArrowRight size={17} />
+                </Link>
               </article>
             ))}
           </div>

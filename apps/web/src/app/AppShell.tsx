@@ -7,16 +7,16 @@ import {
   Gauge,
   LayoutDashboard,
   Network,
+  Server,
   Settings2,
   TerminalSquare,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, Outlet } from 'react-router-dom';
+import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { getNetworks, getSystemHealth } from '../api/control-plane';
 
 const futureNavigation = [
-  { label: 'Topology', icon: Network },
   { label: 'Ledger', icon: Blocks },
   { label: 'Chaincodes', icon: TerminalSquare },
   { label: 'Operations', icon: Activity },
@@ -24,6 +24,7 @@ const futureNavigation = [
 ];
 
 export function AppShell() {
+  const location = useLocation();
   const healthQuery = useQuery({
     queryKey: ['system-health'],
     queryFn: getSystemHealth,
@@ -34,6 +35,11 @@ export function AppShell() {
     queryFn: getNetworks,
     refetchInterval: 10_000,
   });
+  const networkMatch = matchPath('/networks/:networkId/*', location.pathname);
+  const selectedNetworkId = networkMatch?.params.networkId;
+  const selectedNetwork = networksQuery.data?.items.find(
+    (network) => network.id === selectedNetworkId,
+  );
 
   const healthState = healthQuery.isPending
     ? 'checking'
@@ -46,7 +52,9 @@ export function AppShell() {
     degraded: 'Control plane degraded',
     ok: 'Control plane online',
   }[healthState];
-  const networkSelectorLabel = networksQuery.isError
+  const networkSelectorLabel = selectedNetwork
+    ? selectedNetwork.displayName
+    : networksQuery.isError
     ? 'Registry unavailable'
     : (networksQuery.data?.total ?? 0) > 0
       ? 'Choose a network'
@@ -90,6 +98,35 @@ export function AppShell() {
           </NavLink>
 
           <span className="navigation-label navigation-label--spaced">Selected network</span>
+          {selectedNetworkId ? (
+            <>
+              <NavLink
+                className="navigation-link"
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/topology`}
+              >
+                <Network size={17} />
+                <span>Topology</span>
+              </NavLink>
+              <NavLink
+                className="navigation-link"
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/nodes`}
+              >
+                <Server size={17} />
+                <span>Nodes</span>
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <div className="navigation-link navigation-link--disabled">
+                <Network size={17} />
+                <span>Topology</span>
+              </div>
+              <div className="navigation-link navigation-link--disabled">
+                <Server size={17} />
+                <span>Nodes</span>
+              </div>
+            </>
+          )}
           {futureNavigation.map(({ label, icon: Icon }) => (
             <div className="navigation-link navigation-link--disabled" key={label}>
               <Icon size={17} />
@@ -129,6 +166,24 @@ export function AppShell() {
             <Boxes size={18} />
             <span>Networks</span>
           </NavLink>
+          {selectedNetworkId ? (
+            <>
+              <NavLink
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/topology`}
+                aria-label="Selected network topology"
+              >
+                <Network size={18} />
+                <span>Topology</span>
+              </NavLink>
+              <NavLink
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/nodes`}
+                aria-label="Selected network nodes"
+              >
+                <Server size={18} />
+                <span>Nodes</span>
+              </NavLink>
+            </>
+          ) : null}
         </nav>
       </main>
     </div>
