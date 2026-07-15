@@ -1,0 +1,21 @@
+{
+  "name": "plus-fabric-control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "dev": "pnpm --filter @plus-fabric/shared build && pnpm --parallel --filter @plus-fabric/api --filter @plus-fabric/web dev",
+    "build": "pnpm --filter @plus-fabric/shared build && pnpm --filter @plus-fabric/api build && pnpm --filter @plus-fabric/web build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r typecheck",
+    "check": "pnpm test && pnpm typecheck && pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

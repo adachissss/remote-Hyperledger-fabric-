@@ -2,6 +2,32 @@
 
 本项目使用 Bash、Docker Compose 和 Hyperledger Fabric CLI 自动生成并运行一个三组织、三 Orderer 的本地 Fabric 网络。业务链码位于 `chaincode/rsidentity-v1` 和 `chaincode/rsdata-v1`。
 
+仓库同时正在建设一个通用的多网络 Fabric Control Plane。它不预置任何网络实例或链码，架构和迭代计划见：
+
+- `docs/control-plane-architecture.md`
+- `docs/control-plane-roadmap.md`
+
+## Control Plane 开发
+
+Control Plane 使用 pnpm workspace、Fastify、React 和共享 TypeScript schema：
+
+```bash
+pnpm install
+pnpm dev
+```
+
+- Web: `http://127.0.0.1:5173`
+- API: `http://127.0.0.1:4100`
+- Health: `http://127.0.0.1:4100/api/v1/system/health`
+
+完整验证：
+
+```bash
+pnpm check
+```
+
+当前 foundation milestone 的网络注册表有意保持为空，不会把仓库中的 Fabric 工作目录自动注册为平台实例。
+
 ## 仓库边界
 
 Git 只保存项目源码、脚本、模板和示例配置。以下内容均在本机生成，不应提交：

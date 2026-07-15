@@ -1,5 +1,8 @@
 # Node.js dependencies and test output
 **/node_modules/
+**/dist/
+**/.vite/
+.pnpm-store/
 coverage/
 .nyc_output/
 npm-debug.log*
@@ -46,6 +49,7 @@ wallet/
 *.bak
 *.bk
 /history/
+/runtime/
 
 # Editor and OS metadata.
 .idea/

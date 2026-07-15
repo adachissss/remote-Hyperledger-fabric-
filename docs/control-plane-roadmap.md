@@ -5,12 +5,12 @@
 目标：形成可维护的工程边界和可运行空壳。
 
 - [x] 明确架构、API 边界和安全边界；
-- [ ] 建立 pnpm workspace；
-- [ ] 建立 `apps/api`、`apps/web`、`packages/shared`；
-- [ ] 定义通用 Network Registry、Network Driver 和 Chaincode Catalog 接口；
-- [ ] API/Web health check；
-- [ ] 环境配置校验、统一 lint/typecheck/build；
-- [ ] 为 runtime 数据增加忽略规则。
+- [x] 建立 pnpm workspace；
+- [x] 建立 `apps/api`、`apps/web`、`packages/shared`；
+- [x] 定义通用 Network Registry、Network Driver 和 Chaincode Catalog 接口；
+- [x] API/Web health check；
+- [x] 环境配置校验、统一 test/typecheck/build；
+- [x] 为 runtime 数据增加忽略规则。
 
 验收：`pnpm dev` 能同时启动 API 和 Web；`pnpm typecheck`、`pnpm build` 通过。
 
