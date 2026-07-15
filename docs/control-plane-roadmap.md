@@ -18,9 +18,11 @@
 
 目标：不改变 Fabric 状态即可同时观察多个异名 Fabric 网络。
 
-- [ ] 空网络注册表，支持创建或导入多个网络且不自动注入默认实例；
+- [x] SQLite 持久化空网络注册表，不自动注入默认实例；
+- [x] 从管理员允许的服务端工作区导入多个网络；
+- [ ] 创建由平台管理的网络；
 - [ ] 所有 API 和路由以 `networkId` 为第一维；
-- [ ] 解析每个网络脱敏后的配置；
+- [x] 解析每个网络脱敏后的配置；
 - [ ] 封装 `export-network-info.sh`；
 - [ ] Docker 容器状态、镜像、IP、端口和时间；
 - [ ] Fleet Overview、Network Selector、Topology、Nodes、Configuration 页面；

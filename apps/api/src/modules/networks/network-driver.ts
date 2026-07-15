@@ -15,6 +15,9 @@ export type RegisteredNetwork = {
   composeProject: string;
   fabricVersion: string | null;
   fabricCaVersion: string | null;
+  organizationCount: number;
+  channelCount: number;
+  nodeCount: number;
   createdAt: string;
   updatedAt: string;
 };

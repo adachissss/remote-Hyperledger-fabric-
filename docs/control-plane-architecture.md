@@ -210,6 +210,7 @@ queued -> running -> succeeded
 ```text
 GET    /api/v1/system/health
 GET    /api/v1/networks
+POST   /api/v1/networks/import
 GET    /api/v1/networks/:id/config
 GET    /api/v1/networks/:id/topology
 GET    /api/v1/networks/:id/nodes
@@ -257,7 +258,7 @@ Testing
 └── Caliper (later)
 ```
 
-视觉方向是“工业网络观测站”：深墨蓝背景、冷青网络连线、琥珀色告警、紧凑的运行数据与宽松的分析详情并存。Hash、证书 ID 和区块字段使用等宽字体，状态不只依赖颜色，还提供图标和文字。
+视觉方向是亮色“工业网络观测站”：白色与浅灰工作台、深青状态信号、琥珀色告警、紧凑的运行数据与宽松的分析详情并存。Hash、证书 ID 和区块字段使用等宽字体，状态不只依赖颜色，还提供图标和文字。
 
 ## 9. 安全要求
 

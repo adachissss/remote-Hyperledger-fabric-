@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppConfig } from './config.js';
+import { NetworkImportService } from './modules/networks/network-import-service.js';
 import { createNetworkRegistry } from './modules/networks/network-registry.js';
 import { registerNetworkRoutes } from './modules/networks/network-routes.js';
 import { registerSystemRoutes } from './modules/system/system-routes.js';
@@ -18,12 +19,21 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     origin: config.corsOrigins,
   });
 
-  const networkRegistry = createNetworkRegistry();
+  const networkRegistry = createNetworkRegistry(config.databasePath);
+  const networkImportService = new NetworkImportService(
+    networkRegistry,
+    config.allowedNetworkRoots,
+  );
+
+  app.addHook('onClose', async () => {
+    await networkRegistry.close();
+  });
 
   await app.register(registerSystemRoutes, { prefix: '/api/v1/system', startedAt });
   await app.register(registerNetworkRoutes, {
     prefix: '/api/v1/networks',
     networkRegistry,
+    networkImportService,
   });
 
   app.setNotFoundHandler(async (_request, reply) => {

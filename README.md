@@ -9,7 +9,7 @@
 
 ## Control Plane 开发
 
-Control Plane 使用 pnpm workspace、Fastify、React 和共享 TypeScript schema：
+Control Plane 使用 pnpm workspace、Fastify、React 和共享 TypeScript schema。开发环境需要 Node.js 22 和 pnpm 10：
 
 ```bash
 pnpm install
@@ -26,7 +26,15 @@ pnpm dev
 pnpm check
 ```
 
-当前 foundation milestone 的网络注册表有意保持为空，不会把仓库中的 Fabric 工作目录自动注册为平台实例。
+网络注册表默认从空状态启动，不会把仓库或宿主机上的网络自动注册为平台实例。SQLite 数据默认保存在 `runtime/control-plane/control-plane.sqlite`，该目录不会提交到 Git。
+
+导入已有网络前，管理员必须显式允许服务端工作区根目录；多个根目录使用逗号分隔：
+
+```bash
+CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces pnpm dev
+```
+
+控制台只接受允许目录内的真实路径和相对配置路径。未设置该变量时，浏览和健康检查仍可使用，但导入 API 会返回 `403`。
 
 ## 仓库边界
 
