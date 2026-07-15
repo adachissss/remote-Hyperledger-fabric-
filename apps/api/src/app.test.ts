@@ -4,10 +4,17 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { HealthResponseSchema, NetworkListResponseSchema } from '@plus-fabric/shared';
+import {
+  HealthResponseSchema,
+  NetworkListResponseSchema,
+  NetworkNodeListResponseSchema,
+  NetworkNodeSchema,
+  NetworkTopologyResponseSchema,
+} from '@plus-fabric/shared';
 
 import { buildApp } from './app.js';
 import { loadConfig, type AppConfig } from './config.js';
+import type { DockerRuntime } from './modules/networks/docker-runtime.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -16,6 +23,38 @@ function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
     ...overrides,
   });
 }
+
+const observableDockerRuntime: DockerRuntime = {
+  async probe() {
+    return { available: true, reason: null };
+  },
+  async inspectContainer(containerName, expectedNetwork) {
+    if (containerName !== 'orderer1.network-a.test') return null;
+    return {
+      containerId: 'orderer-container-id',
+      status: 'running',
+      running: true,
+      paused: false,
+      restarting: false,
+      health: 'healthy',
+      image: 'hyperledger/fabric-orderer:3.1.4',
+      startedAt: '2026-07-15T10:00:00.000000000Z',
+      finishedAt: null,
+      restartCount: 0,
+      networkAttached: expectedNetwork === 'network-a-docker',
+      ipAddress: '172.20.0.2',
+    };
+  },
+};
+
+const unavailableDockerRuntime: DockerRuntime = {
+  async probe() {
+    return { available: false, reason: 'Docker is unavailable in this test.' };
+  },
+  async inspectContainer() {
+    throw new Error('inspect must not run when Docker is unavailable');
+  },
+};
 
 test('health endpoint exposes a valid control-plane heartbeat', async () => {
   const app = await buildApp(createTestConfig());
@@ -102,6 +141,10 @@ network:
   domain: network-a.test
   tls_enabled: true
 ordererOrg:
+  mspid: OrdererMSP
+  domain: network-a.test
+  ca_url: https://localhost:10054
+  ca_name: ca-orderer
   admin_password: never-return-this
   nodes:
     - name: orderer1
@@ -111,6 +154,8 @@ peerOrgs:
   - name: org1
     mspid: Org1MSP
     domain: org1.network-a.test
+    ca_url: https://localhost:7054
+    ca_name: ca-org1
     admin_password: never-return-this-either
     peer_count: 1
     anchor_peers:
@@ -130,7 +175,7 @@ channels:
   });
 
   try {
-    const app = await buildApp(config);
+    const app = await buildApp(config, { dockerRuntime: observableDockerRuntime });
     try {
       const importResponse = await app.inject({
         method: 'POST',
@@ -157,7 +202,7 @@ channels:
         fabricVersion: '3.1.4',
         organizationCount: 1,
         channelCount: 1,
-        nodeCount: 2,
+        nodeCount: 4,
         updatedAt: importResponse.json().updatedAt,
       });
 
@@ -173,6 +218,47 @@ channels:
       assert.equal(configResponse.json().networkName, 'network-a-docker');
       assert.equal(configResponse.json().channels[0].name, 'channel-a');
       assert.doesNotMatch(configResponse.body, /never-return-this/);
+
+      const topologyResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/topology',
+      });
+      assert.equal(topologyResponse.statusCode, 200);
+      const topology = NetworkTopologyResponseSchema.parse(topologyResponse.json());
+      assert.equal(topology.organizations.length, 2);
+      assert.equal(topology.nodes.length, 4);
+      assert.deepEqual(
+        topology.nodes.map((node) => node.type).sort(),
+        ['ca', 'ca', 'orderer', 'peer'],
+      );
+
+      const nodesResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/nodes',
+      });
+      assert.equal(nodesResponse.statusCode, 200);
+      const nodes = NetworkNodeListResponseSchema.parse(nodesResponse.json());
+      assert.equal(nodes.total, 4);
+      assert.equal(nodes.running, 1);
+      assert.equal(nodes.missing, 3);
+      assert.equal(nodes.dockerAvailable, true);
+
+      const nodeResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/nodes/orderer1.network-a.test',
+      });
+      assert.equal(nodeResponse.statusCode, 200);
+      const orderer = NetworkNodeSchema.parse(nodeResponse.json());
+      assert.equal(orderer.runtime.state, 'running');
+      assert.equal(orderer.runtime.networkAttached, true);
+      assert.equal(orderer.runtime.ipAddress, '172.20.0.2');
+
+      const unknownNodeResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/nodes/unknown-node',
+      });
+      assert.equal(unknownNodeResponse.statusCode, 404);
+      assert.equal(unknownNodeResponse.json().error, 'node_not_found');
 
       const duplicateResponse = await app.inject({
         method: 'POST',
@@ -212,7 +298,7 @@ channels:
       await app.close();
     }
 
-    const restartedApp = await buildApp(config);
+    const restartedApp = await buildApp(config, { dockerRuntime: unavailableDockerRuntime });
     try {
       const persistedResponse = await restartedApp.inject({
         method: 'GET',
@@ -224,6 +310,17 @@ channels:
         persistedResponse.json().items.map((network: { id: string }) => network.id).sort(),
         ['network-a', 'network-b'],
       );
+
+      const unavailableNodesResponse = await restartedApp.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/nodes',
+      });
+      const unavailableNodes = NetworkNodeListResponseSchema.parse(
+        unavailableNodesResponse.json(),
+      );
+      assert.equal(unavailableNodes.dockerAvailable, false);
+      assert.equal(unavailableNodes.items[0]?.runtime.state, 'docker-unavailable');
+      assert.equal(unavailableNodes.missing, 0);
     } finally {
       await restartedApp.close();
     }

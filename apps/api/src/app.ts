@@ -2,12 +2,21 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppConfig } from './config.js';
+import { DockerCliRuntime, type DockerRuntime } from './modules/networks/docker-runtime.js';
 import { NetworkImportService } from './modules/networks/network-import-service.js';
+import { NetworkObservatoryService } from './modules/networks/network-observatory-service.js';
 import { createNetworkRegistry } from './modules/networks/network-registry.js';
 import { registerNetworkRoutes } from './modules/networks/network-routes.js';
 import { registerSystemRoutes } from './modules/system/system-routes.js';
 
-export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
+export type AppDependencies = {
+  dockerRuntime?: DockerRuntime;
+};
+
+export async function buildApp(
+  config: AppConfig,
+  dependencies: AppDependencies = {},
+): Promise<FastifyInstance> {
   const startedAt = Date.now();
   const app = Fastify({
     logger: {
@@ -24,6 +33,10 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     networkRegistry,
     config.allowedNetworkRoots,
   );
+  const networkObservatoryService = new NetworkObservatoryService(
+    networkImportService,
+    dependencies.dockerRuntime ?? new DockerCliRuntime(),
+  );
 
   app.addHook('onClose', async () => {
     await networkRegistry.close();
@@ -34,6 +47,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     prefix: '/api/v1/networks',
     networkRegistry,
     networkImportService,
+    networkObservatoryService,
   });
 
   app.setNotFoundHandler(async (_request, reply) => {

@@ -7,7 +7,10 @@ import type {
   RedactedNetworkConfiguration,
 } from '@plus-fabric/shared';
 
-import { readFabricComposeConfig } from './fabric-compose-config.js';
+import {
+  readFabricComposeConfig,
+  type FabricComposeConfigSnapshot,
+} from './fabric-compose-config.js';
 import type { RegisteredNetwork } from './network-driver.js';
 import {
   NetworkRegistryConflictError,
@@ -84,6 +87,10 @@ export class NetworkImportService {
   }
 
   async getConfig(networkId: string): Promise<RedactedNetworkConfiguration> {
+    return (await this.getSnapshot(networkId)).redacted;
+  }
+
+  async getSnapshot(networkId: string): Promise<FabricComposeConfigSnapshot> {
     const network = await this.registry.get(networkId);
     if (!network) {
       throw new NetworkImportError(
@@ -97,7 +104,7 @@ export class NetworkImportService {
       const workspaceRoot = this.resolveWorkspaceRoot(network.workspaceRoot);
       const relativeConfigPath = path.relative(workspaceRoot, network.configPath);
       const configPath = this.resolveConfigPath(workspaceRoot, relativeConfigPath);
-      return readFabricComposeConfig(network.id, configPath).redacted;
+      return readFabricComposeConfig(network.id, configPath);
     } catch (error) {
       throw new NetworkImportError(
         'network_config_unavailable',
