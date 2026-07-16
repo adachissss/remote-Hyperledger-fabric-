@@ -36,15 +36,15 @@
 
 目标：将网络生命周期变成可观察的异步作业。
 
-- [ ] Job/JobStep 数据模型；
+- [x] Job/JobStep/JobEvent 数据模型与 SQLite 持久化；
 - [ ] managed network 独立工作区、Compose project、Docker network 和端口冲突检查；
-- [ ] 将当前单工作区脚本适配为通用 `fabric-compose` driver，并保留原脚本命令入口；
-- [ ] 安全子进程执行器；
-- [ ] SSE 实时日志；
-- [ ] up、stop、restart；
-- [ ] 带二次确认的 down；
-- [ ] 网络级锁、超时、取消和审计；
-- [ ] Operations 页面与步骤时间线。
+- [x] 按注册工作区、配置路径和 Compose project 调用原脚本，并保留原脚本命令入口；
+- [x] 无 Shell 拼接的子进程执行器与基础日志脱敏；
+- [x] SSE 实时日志与历史事件重放；
+- [x] up、stop、restart；
+- [x] 带网络 ID 确认的 down；
+- [x] 网络级锁、超时、取消、异常重启恢复和本地作业记录；
+- [x] Operations 页面、步骤状态与实时日志控制台。
 
 验收：浏览器发起部署后可以看到完整步骤、实时日志和最终状态；重复点击不会并发破坏同一网络。
 

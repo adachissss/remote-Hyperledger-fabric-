@@ -36,6 +36,10 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 
 控制台只接受允许目录内的真实路径和相对配置路径。未设置该变量时，浏览和健康检查仍可使用，但导入 API 会返回 `403`。
 
+导入包含可执行 `network.sh` 的工作区后，可以从网络详情的“运维”页面执行 `up`、`stop`、`restart` 和 `down`。控制平面会继续调用原脚本，并使用注册时保存的工作区、配置文件和 Compose project；原有命令行方式不受影响。作业步骤、退出码和实时日志保存在本地 SQLite 中，同一网络不会并发执行两个生命周期操作。
+
+`down` 会删除卷、组织材料和通道产物，网页端需要输入网络 ID 确认。也可以继续直接使用下文的 `./network.sh down`。
+
 ## 仓库边界
 
 Git 只保存项目源码、脚本、模板和示例配置。以下内容均在本机生成，不应提交：

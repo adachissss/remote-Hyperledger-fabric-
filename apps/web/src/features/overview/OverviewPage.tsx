@@ -2,9 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Activity, Boxes, RadioTower, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { getNetworks, getSystemHealth } from '../../api/control-plane';
+import { getJobs, getNetworks, getSystemHealth } from '../../api/control-plane';
 import { MetricCard } from '../../components/MetricCard';
 import { Panel } from '../../components/Panel';
+import {
+  formatDateTimeZh,
+  getJobStatusLabel,
+  getNetworkActionLabel,
+} from '../../i18n/zh-CN';
 
 export function OverviewPage() {
   const healthQuery = useQuery({
@@ -17,6 +22,11 @@ export function OverviewPage() {
     queryFn: getNetworks,
     refetchInterval: 10_000,
   });
+  const jobsQuery = useQuery({
+    queryKey: ['jobs'],
+    queryFn: () => getJobs(),
+    refetchInterval: 5_000,
+  });
 
   const healthMetric = healthQuery.isPending
     ? { value: '检查中', detail: '正在等待 API 心跳', tone: 'neutral' as const }
@@ -26,6 +36,8 @@ export function OverviewPage() {
         ? { value: '已降级', detail: 'API 报告服务处于降级状态', tone: 'amber' as const }
         : { value: '在线', detail: 'API 心跳正常', tone: 'cyan' as const };
   const networkCount = networksQuery.data?.total;
+  const activeJobs =
+    jobsQuery.data?.items.filter((job) => job.status === 'queued' || job.status === 'running') ?? [];
   const networkMetric = networksQuery.isPending
     ? { value: '…', detail: '正在加载网络注册表', tone: 'neutral' as const }
     : networksQuery.isError
@@ -78,9 +90,16 @@ export function OverviewPage() {
         />
         <MetricCard
           label="活跃运维"
-          value="0"
-          detail="作业引擎尚未启用"
+          value={jobsQuery.isPending ? '…' : jobsQuery.isError ? '异常' : String(activeJobs.length)}
+          detail={
+            jobsQuery.isError
+              ? '作业服务暂时不可用'
+              : activeJobs.length > 0
+                ? '网络脚本正在执行'
+                : '当前没有运行中的作业'
+          }
           icon={Activity}
+          tone={jobsQuery.isError || activeJobs.length > 0 ? 'amber' : 'neutral'}
         />
       </section>
 
@@ -167,14 +186,44 @@ export function OverviewPage() {
       </div>
 
       <Panel eyebrow="活动" title="运维时间线">
-        <div className="timeline-empty">
-          <span className="timeline-empty__line" />
-          <span className="timeline-empty__dot" />
-          <div>
-            <strong>暂无运维记录</strong>
-            <p>网络部署、生命周期变更和合约提交记录将显示在这里。</p>
+        {jobsQuery.isError ? (
+          <div className="query-state query-state--error">
+            <div>
+              <h3>运维记录不可用</h3>
+              <p>控制平面没有返回有效的作业数据。</p>
+            </div>
+            <button className="secondary-action" type="button" onClick={() => jobsQuery.refetch()}>
+              重试
+            </button>
           </div>
-        </div>
+        ) : (jobsQuery.data?.items.length ?? 0) === 0 ? (
+          <div className="timeline-empty">
+            <span className="timeline-empty__line" />
+            <span className="timeline-empty__dot" />
+            <div>
+              <strong>暂无运维记录</strong>
+              <p>网络部署、生命周期变更和合约提交记录将显示在这里。</p>
+            </div>
+          </div>
+        ) : (
+          <div className="overview-job-list">
+            {jobsQuery.data?.items.slice(0, 5).map((job) => (
+              <Link
+                to={`/networks/${encodeURIComponent(job.networkId)}/operations`}
+                key={job.id}
+              >
+                <span className={`job-status-dot job-status-dot--${job.status}`} />
+                <span>
+                  <strong>{getNetworkActionLabel(job.action)}</strong>
+                  <small>{job.networkId} · {formatDateTimeZh(job.createdAt)}</small>
+                </span>
+                <em className={`job-status job-status--${job.status}`}>
+                  {getJobStatusLabel(job.status)}
+                </em>
+              </Link>
+            ))}
+          </div>
+        )}
       </Panel>
     </div>
   );

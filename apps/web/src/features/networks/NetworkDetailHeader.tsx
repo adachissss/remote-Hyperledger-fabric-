@@ -51,6 +51,7 @@ export function NetworkDetailHeader({
         <NavLink to={`/networks/${encodedNetworkId}/topology`}>拓扑</NavLink>
         <NavLink to={`/networks/${encodedNetworkId}/nodes`}>节点</NavLink>
         <NavLink to={`/networks/${encodedNetworkId}/configuration`}>配置</NavLink>
+        <NavLink to={`/networks/${encodedNetworkId}/operations`}>运维</NavLink>
       </nav>
     </>
   );

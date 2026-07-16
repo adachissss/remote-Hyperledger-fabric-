@@ -1,5 +1,7 @@
 import type {
+  JobStatus,
   NetworkManagementMode,
+  NetworkLifecycleAction,
   NetworkNodeRuntimeState,
   NetworkNodeType,
   NetworkRuntimeStatus,
@@ -24,6 +26,13 @@ const apiErrorMessages: Record<string, string> = {
   not_found: '请求的控制平面资源不存在。',
   internal_error: '控制平面暂时无法完成请求，请稍后重试。',
   network_scope_mismatch: '控制平面返回了其他网络的数据，已拒绝显示。',
+  invalid_job_id: '作业 ID 格式不正确。',
+  job_not_found: '找不到指定作业。',
+  job_not_active: '该作业已经结束或不在当前进程中运行。',
+  network_job_active: '该网络已有运维作业正在执行，请等待完成后重试。',
+  network_confirmation_required: '清理网络前必须输入当前网络 ID 进行确认。',
+  network_script_unavailable: '该网络工作区没有可执行的 network.sh。',
+  invalid_network_action: '不支持该网络操作。',
 };
 
 const runtimeStateLabels: Record<NetworkNodeRuntimeState, string> = {
@@ -60,6 +69,21 @@ const nodeTypeLabels: Record<NetworkNodeType, string> = {
   ca: 'CA 节点',
 };
 
+const jobStatusLabels: Record<JobStatus, string> = {
+  queued: '等待执行',
+  running: '执行中',
+  succeeded: '已成功',
+  failed: '已失败',
+  cancelled: '已取消',
+};
+
+const networkActionLabels: Record<NetworkLifecycleAction, string> = {
+  up: '部署网络',
+  stop: '停止网络',
+  restart: '恢复网络',
+  down: '清理网络',
+};
+
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ControlPlaneApiError)) return fallback;
   return (error.code && apiErrorMessages[error.code]) || fallback;
@@ -79,6 +103,14 @@ export function getManagementModeLabel(mode: NetworkManagementMode): string {
 
 export function getNodeTypeLabel(type: NetworkNodeType): string {
   return nodeTypeLabels[type];
+}
+
+export function getJobStatusLabel(status: JobStatus): string {
+  return jobStatusLabels[status];
+}
+
+export function getNetworkActionLabel(action: NetworkLifecycleAction): string {
+  return networkActionLabels[action];
 }
 
 export function getOrganizationTypeLabel(type: 'peer' | 'orderer'): string {

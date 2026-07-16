@@ -1,12 +1,15 @@
 import {
+  CreateNetworkActionRequestSchema,
   ImportNetworkRequestSchema,
   NetworkIdSchema,
   NetworkListResponseSchema,
   NetworkNodeIdSchema,
+  NetworkLifecycleActionSchema,
   type NetworkListResponse,
 } from '@plus-fabric/shared';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
+import { JobServiceError, type JobService } from '../jobs/job-service.js';
 import { NetworkImportError, type NetworkImportService } from './network-import-service.js';
 import type { NetworkObservatoryService } from './network-observatory-service.js';
 import type { NetworkRegistry } from './network-registry.js';
@@ -15,6 +18,7 @@ type NetworkRouteOptions = {
   networkRegistry: NetworkRegistry;
   networkImportService: NetworkImportService;
   networkObservatoryService: NetworkObservatoryService;
+  jobService: JobService;
 };
 
 export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = async (
@@ -104,6 +108,40 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
       return sendNetworkError(error, reply);
     }
   });
+
+  app.post('/:networkId/actions/:action', async (request, reply) => {
+    const networkId = parseNetworkId(request.params, reply);
+    if (!networkId) return;
+
+    const action = NetworkLifecycleActionSchema.safeParse(
+      (request.params as { action?: unknown }).action,
+    );
+    if (!action.success) {
+      return reply.code(400).send({
+        error: 'invalid_network_action',
+        message: 'The network lifecycle action is invalid.',
+      });
+    }
+    const body = CreateNetworkActionRequestSchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        message: 'The network action request is invalid.',
+        issues: body.error.issues,
+      });
+    }
+
+    try {
+      const job = await options.jobService.createNetworkAction(
+        networkId,
+        action.data,
+        body.data.confirmation,
+      );
+      return reply.code(202).send(job);
+    } catch (error) {
+      return sendNetworkError(error, reply);
+    }
+  });
 };
 
 function parseNetworkId(params: unknown, reply: FastifyReply): string | null {
@@ -119,6 +157,12 @@ function parseNetworkId(params: unknown, reply: FastifyReply): string | null {
 
 function sendNetworkError(error: unknown, reply: FastifyReply) {
   if (error instanceof NetworkImportError) {
+    return reply.code(error.statusCode).send({
+      error: error.code,
+      message: error.message,
+    });
+  }
+  if (error instanceof JobServiceError) {
     return reply.code(error.statusCode).send({
       error: error.code,
       message: error.message,

@@ -2,6 +2,13 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppConfig } from './config.js';
+import { createJobRegistry } from './modules/jobs/job-registry.js';
+import { registerJobRoutes } from './modules/jobs/job-routes.js';
+import { JobService } from './modules/jobs/job-service.js';
+import {
+  NodeLifecycleProcessRunner,
+  type LifecycleProcessRunner,
+} from './modules/jobs/process-runner.js';
 import { DockerCliRuntime, type DockerRuntime } from './modules/networks/docker-runtime.js';
 import { NetworkImportService } from './modules/networks/network-import-service.js';
 import { NetworkObservatoryService } from './modules/networks/network-observatory-service.js';
@@ -13,6 +20,7 @@ import { registerSystemRoutes } from './modules/system/system-routes.js';
 export type AppDependencies = {
   dockerRuntime?: DockerRuntime;
   serviceProbe?: ServiceProbe;
+  processRunner?: LifecycleProcessRunner;
 };
 
 export async function buildApp(
@@ -31,6 +39,7 @@ export async function buildApp(
   });
 
   const networkRegistry = createNetworkRegistry(config.databasePath);
+  const jobRegistry = createJobRegistry(config.databasePath);
   const networkImportService = new NetworkImportService(
     networkRegistry,
     config.allowedNetworkRoots,
@@ -40,17 +49,27 @@ export async function buildApp(
     dependencies.dockerRuntime ?? new DockerCliRuntime(),
     dependencies.serviceProbe ?? new TcpServiceProbe(),
   );
+  const jobService = new JobService(
+    jobRegistry,
+    networkRegistry,
+    dependencies.processRunner ?? new NodeLifecycleProcessRunner(),
+  );
+  await jobService.initialize();
 
   app.addHook('onClose', async () => {
+    await jobService.close();
+    await jobRegistry.close();
     await networkRegistry.close();
   });
 
   await app.register(registerSystemRoutes, { prefix: '/api/v1/system', startedAt });
+  await app.register(registerJobRoutes, { prefix: '/api/v1/jobs', jobService });
   await app.register(registerNetworkRoutes, {
     prefix: '/api/v1/networks',
     networkRegistry,
     networkImportService,
     networkObservatoryService,
+    jobService,
   });
 
   app.setNotFoundHandler(async (_request, reply) => {

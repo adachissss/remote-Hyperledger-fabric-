@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,9 @@ import test from 'node:test';
 
 import {
   HealthResponseSchema,
+  JobEventListResponseSchema,
+  JobListResponseSchema,
+  JobSchema,
   NetworkListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
@@ -17,6 +20,7 @@ import { buildApp } from './app.js';
 import { loadConfig, type AppConfig } from './config.js';
 import type { DockerRuntime } from './modules/networks/docker-runtime.js';
 import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
+import type { LifecycleProcessRunner } from './modules/jobs/process-runner.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -69,6 +73,16 @@ const reachableServiceProbe: ServiceProbe = {
 const unreachableServiceProbe: ServiceProbe = {
   async probe() {
     return { reachable: false, latencyMs: null };
+  },
+};
+
+const successfulProcessRunner: LifecycleProcessRunner = {
+  async run(request) {
+    assert.equal(request.action, 'restart');
+    assert.equal(request.executable, path.join(request.cwd, 'network.sh'));
+    assert.equal(request.composeProject, 'network_a');
+    await request.onLine({ stream: 'stdout', message: 'network restart completed' });
+    return { exitCode: 0, signal: null, cancelled: false, timedOut: false };
   },
 };
 
@@ -212,6 +226,8 @@ channels:
     memberOrgs: [org1]
 `,
   );
+  writeFileSync(path.join(workspaceRoot, 'network.sh'), '#!/usr/bin/env bash\nexit 0\n');
+  chmodSync(path.join(workspaceRoot, 'network.sh'), 0o755);
 
   const config = createTestConfig({
     CONTROL_PLANE_ALLOWED_NETWORK_ROOTS: temporaryRoot,
@@ -222,6 +238,7 @@ channels:
     const app = await buildApp(config, {
       dockerRuntime: observableDockerRuntime,
       serviceProbe: reachableServiceProbe,
+      processRunner: successfulProcessRunner,
     });
     try {
       const importResponse = await app.inject({
@@ -344,6 +361,48 @@ channels:
         concurrentResponses.find((response) => response.statusCode === 409)?.json().error,
         'network_exists',
       );
+
+      const emptyJobsResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/jobs?networkId=network-a',
+      });
+      assert.equal(emptyJobsResponse.statusCode, 200);
+      assert.equal(JobListResponseSchema.parse(emptyJobsResponse.json()).total, 0);
+
+      const unsafeDownResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/network-a/actions/down',
+        payload: {},
+      });
+      assert.equal(unsafeDownResponse.statusCode, 400);
+      assert.equal(unsafeDownResponse.json().error, 'network_confirmation_required');
+
+      const actionResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/network-a/actions/restart',
+        payload: {},
+      });
+      assert.equal(actionResponse.statusCode, 202);
+      const queuedJob = JobSchema.parse(actionResponse.json());
+      assert.equal(queuedJob.action, 'restart');
+      assert.equal(queuedJob.status, 'queued');
+
+      const finishedJob = await waitForJob(app, queuedJob.id, 'succeeded');
+      assert.equal(finishedJob.exitCode, 0);
+      assert.equal(finishedJob.steps[0]?.status, 'succeeded');
+
+      const jobEventsResponse = await app.inject({
+        method: 'GET',
+        url: `/api/v1/jobs/${queuedJob.id}/events`,
+      });
+      const jobEvents = JobEventListResponseSchema.parse(jobEventsResponse.json());
+      assert(jobEvents.items.some((event) => event.message === 'network restart completed'));
+
+      const jobsResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/jobs?networkId=network-a',
+      });
+      assert.equal(JobListResponseSchema.parse(jobsResponse.json()).total, 1);
     } finally {
       await app.close();
     }
@@ -397,3 +456,17 @@ channels:
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
 });
+
+async function waitForJob(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  jobId: string,
+  status: 'succeeded' | 'failed' | 'cancelled',
+) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await app.inject({ method: 'GET', url: `/api/v1/jobs/${jobId}` });
+    const job = JobSchema.parse(response.json());
+    if (job.status === status) return job;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(`Job ${jobId} did not reach ${status}.`);
+}

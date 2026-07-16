@@ -175,6 +175,10 @@ queued -> running -> succeeded
 
 所有命令使用 `spawn(executable, args, { shell: false })`；禁止把用户输入拼接进 Shell 字符串。
 
+当前本地实验版本已经实现网络生命周期作业：Job、JobStep 和 JobEvent 持久化到 SQLite；同一 `networkId` 的活动作业由数据库唯一索引互斥；控制平面异常重启时，遗留的等待中或执行中作业会自动标记为失败并释放锁。执行器以注册的 `workspaceRoot` 为工作目录，传入可信的 `CONFIG_FILE` 和 `COMPOSE_PROJECT_NAME`，随后直接执行原 `network.sh` 的 `up`、`stop`、`restart` 或 `down` 参数。stdout/stderr 会去除 ANSI 控制符并进行基础凭据脱敏，既可通过 JSON 查询，也可使用 `Accept: text/event-stream` 实时订阅。
+
+Operations 页面提供四个生命周期入口、作业取消、历史步骤和日志查看。`down` 需要输入网络 ID 确认。当前操作者记录为本地 `local-user`，认证与细粒度 RBAC 仍属于后续加固阶段。
+
 ### 6.4 Block Service
 
 区块浏览器需要递归解析 protobuf，而不是只展示 `configtxlator` 的顶层 JSON：

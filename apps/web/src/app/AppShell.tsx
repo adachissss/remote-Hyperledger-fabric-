@@ -20,7 +20,6 @@ import { getNetworks, getSystemHealth } from '../api/control-plane';
 const futureNavigation = [
   { label: '账本', icon: Blocks },
   { label: '链码', icon: TerminalSquare },
-  { label: '运维', icon: Activity },
   { label: '测试', icon: Gauge },
 ];
 
@@ -122,6 +121,13 @@ export function AppShell() {
                 <FileCog size={17} />
                 <span>配置</span>
               </NavLink>
+              <NavLink
+                className="navigation-link"
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/operations`}
+              >
+                <Activity size={17} />
+                <span>运维</span>
+              </NavLink>
             </>
           ) : (
             <>
@@ -136,6 +142,10 @@ export function AppShell() {
               <div className="navigation-link navigation-link--disabled">
                 <FileCog size={17} />
                 <span>配置</span>
+              </div>
+              <div className="navigation-link navigation-link--disabled">
+                <Activity size={17} />
+                <span>运维</span>
               </div>
             </>
           )}
@@ -200,6 +210,13 @@ export function AppShell() {
               >
                 <FileCog size={18} />
                 <span>配置</span>
+              </NavLink>
+              <NavLink
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/operations`}
+                aria-label="当前网络运维"
+              >
+                <Activity size={18} />
+                <span>运维</span>
               </NavLink>
             </>
           ) : null}

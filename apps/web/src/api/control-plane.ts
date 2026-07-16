@@ -1,6 +1,10 @@
 import {
   HealthResponseSchema,
   ImportNetworkRequestSchema,
+  JobEventListResponseSchema,
+  JobEventSchema,
+  JobListResponseSchema,
+  JobSchema,
   NetworkListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
@@ -9,12 +13,17 @@ import {
   NetworkTopologyResponseSchema,
   type HealthResponse,
   type ImportNetworkRequest,
+  type Job,
+  type JobEvent,
+  type JobEventListResponse,
+  type JobListResponse,
   type NetworkListResponse,
   type NetworkNode,
   type NetworkNodeListResponse,
   type RedactedNetworkConfiguration,
   type NetworkSummary,
   type NetworkTopologyResponse,
+  type NetworkLifecycleAction,
 } from '@plus-fabric/shared';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -106,6 +115,66 @@ export async function getNetworkConfiguration(
   );
   assertNetworkScope(networkId, configuration.networkId);
   return configuration;
+}
+
+export async function getJobs(networkId?: string): Promise<JobListResponse> {
+  const query = networkId ? `?networkId=${encodeURIComponent(networkId)}` : '';
+  return JobListResponseSchema.parse(await requestJson(`/api/v1/jobs${query}`));
+}
+
+export async function getJob(jobId: string): Promise<Job> {
+  return JobSchema.parse(await requestJson(`/api/v1/jobs/${encodeURIComponent(jobId)}`));
+}
+
+export async function getJobEvents(jobId: string, afterId = 0): Promise<JobEventListResponse> {
+  return JobEventListResponseSchema.parse(
+    await requestJson(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/events?after=${encodeURIComponent(afterId)}`,
+    ),
+  );
+}
+
+export async function createNetworkAction(request: {
+  networkId: string;
+  action: NetworkLifecycleAction;
+  confirmation?: string;
+}): Promise<Job> {
+  return JobSchema.parse(
+    await requestJson(
+      `/api/v1/networks/${encodeURIComponent(request.networkId)}/actions/${request.action}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          request.confirmation ? { confirmation: request.confirmation } : {},
+        ),
+      },
+    ),
+  );
+}
+
+export async function cancelJob(jobId: string): Promise<Job> {
+  return JobSchema.parse(
+    await requestJson(`/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+    }),
+  );
+}
+
+export function subscribeToJobEvents(
+  jobId: string,
+  onEvent: (event: JobEvent) => void,
+): () => void {
+  const source = new EventSource(
+    `${apiBaseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/events`,
+  );
+  source.onmessage = (message) => {
+    try {
+      onEvent(JobEventSchema.parse(JSON.parse(message.data)));
+    } catch {
+      // Ignore malformed events; the regular job queries remain the source of truth.
+    }
+  };
+  return () => source.close();
 }
 
 function assertNetworkScope(requestedNetworkId: string, responseNetworkId: string): void {
