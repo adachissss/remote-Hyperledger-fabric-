@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Manrope', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   color: #14231f;
   background: #f4f7f5;
   font-synthesis: none;
@@ -19,7 +19,7 @@
   --amber: #b96b0b;
   --amber-soft: rgba(185, 107, 11, 0.09);
   --danger: #c7433a;
-  --mono: 'Azeret Mono', monospace;
+  --mono: 'Azeret Mono', 'Noto Sans Mono CJK SC', 'Microsoft YaHei', monospace;
   --shadow: 0 24px 70px rgba(35, 77, 64, 0.1);
 }
 
@@ -123,7 +123,7 @@ a {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .eyebrow,
@@ -135,7 +135,7 @@ a {
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .network-context {
@@ -213,9 +213,9 @@ a {
 .navigation-soon {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .sidebar-footer {
@@ -270,7 +270,7 @@ a {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .topbar-status__pulse {
@@ -421,7 +421,7 @@ a {
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .radar-label--top { top: -2px; left: 96px; }
@@ -453,7 +453,7 @@ a {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .metric-card strong {
@@ -507,7 +507,7 @@ a {
   font-family: var(--mono);
   font-size: 10px;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .empty-registry {
@@ -567,7 +567,7 @@ a {
   font-weight: 600;
   letter-spacing: 0;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
   border: 1px solid transparent;
 }
 
@@ -802,7 +802,7 @@ button:disabled {
   color: var(--faint);
   font-family: var(--mono);
   font-size: 9px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .network-row__open {
@@ -821,7 +821,7 @@ button:disabled {
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .network-row dd {
@@ -909,7 +909,7 @@ button:disabled {
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .import-form label > small {
@@ -1018,7 +1018,7 @@ button:disabled {
   font-size: 10px;
   text-align: center;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .network-tabs a.active {
@@ -1074,8 +1074,8 @@ button:disabled {
 .topology-metric span {
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
+  font-size: 9px;
+  text-transform: none;
 }
 
 .topology-metric strong {
@@ -1160,7 +1160,7 @@ button:disabled {
   margin: 0;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .organization-stack {
@@ -1213,8 +1213,8 @@ button:disabled {
   grid-column: 2;
   color: var(--cyan);
   font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
+  font-size: 9px;
+  text-transform: none;
 }
 
 .organization-lane__nodes {
@@ -1294,9 +1294,9 @@ button:disabled {
 .topology-node em {
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 9px;
   font-style: normal;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .channel-empty {
@@ -1384,8 +1384,8 @@ button:disabled {
 .node-summary__item span {
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
+  font-size: 9px;
+  text-transform: none;
 }
 
 .node-summary__item strong {
@@ -1406,7 +1406,7 @@ button:disabled {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 9px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .docker-state--online svg { color: var(--cyan); }
@@ -1428,8 +1428,8 @@ button:disabled {
   border-right: 1px solid var(--line);
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
+  font-size: 9px;
+  text-transform: none;
 }
 
 .node-filters button:last-child {
@@ -1514,9 +1514,9 @@ button:disabled {
   color: var(--faint);
   border: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 9px;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .node-state-label--running {
@@ -1579,8 +1579,8 @@ button:disabled {
 .node-endpoints > span {
   color: var(--faint);
   font-family: var(--mono);
-  font-size: 8px;
-  text-transform: uppercase;
+  font-size: 9px;
+  text-transform: none;
 }
 
 .node-runtime-detail dd {
@@ -1613,7 +1613,7 @@ button:disabled {
   color: var(--muted);
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  font-size: 8px;
+  font-size: 9px;
   overflow-wrap: anywhere;
 }
 

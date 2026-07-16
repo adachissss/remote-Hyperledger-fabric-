@@ -17,10 +17,10 @@ import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { getNetworks, getSystemHealth } from '../api/control-plane';
 
 const futureNavigation = [
-  { label: 'Ledger', icon: Blocks },
-  { label: 'Chaincodes', icon: TerminalSquare },
-  { label: 'Operations', icon: Activity },
-  { label: 'Testing', icon: Gauge },
+  { label: '账本', icon: Blocks },
+  { label: '链码', icon: TerminalSquare },
+  { label: '运维', icon: Activity },
+  { label: '测试', icon: Gauge },
 ];
 
 export function AppShell() {
@@ -47,18 +47,18 @@ export function AppShell() {
       ? 'offline'
       : healthQuery.data.status;
   const healthLabel = {
-    checking: 'Checking control plane',
-    offline: 'Control plane offline',
-    degraded: 'Control plane degraded',
-    ok: 'Control plane online',
+    checking: '正在检查控制平面',
+    offline: '控制平面离线',
+    degraded: '控制平面已降级',
+    ok: '控制平面在线',
   }[healthState];
   const networkSelectorLabel = selectedNetwork
     ? selectedNetwork.displayName
     : networksQuery.isError
-    ? 'Registry unavailable'
+    ? '网络注册表不可用'
     : (networksQuery.data?.total ?? 0) > 0
-      ? 'Choose a network'
-      : 'No network selected';
+      ? '选择网络'
+      : '未选择网络';
 
   return (
     <div className="app-frame">
@@ -69,16 +69,16 @@ export function AppShell() {
           </div>
           <div>
             <span className="brand-name">Fabric</span>
-            <span className="brand-subtitle">Control Plane</span>
+            <span className="brand-subtitle">控制平面</span>
           </div>
         </div>
 
         <div className="network-context">
-          <span className="eyebrow">Network context</span>
+          <span className="eyebrow">网络上下文</span>
           <NavLink
             className="network-selector"
             to="/networks"
-            aria-label="Open the network registry"
+            aria-label="打开网络注册表"
           >
             <span className="network-selector__signal" />
             <span>{networkSelectorLabel}</span>
@@ -86,18 +86,18 @@ export function AppShell() {
           </NavLink>
         </div>
 
-        <nav className="navigation" aria-label="Primary navigation">
-          <span className="navigation-label">Fleet</span>
-          <NavLink className="navigation-link" to="/" end aria-label="Fleet overview">
+        <nav className="navigation" aria-label="主导航">
+          <span className="navigation-label">网络集群</span>
+          <NavLink className="navigation-link" to="/" end aria-label="集群概览">
             <LayoutDashboard size={17} />
-            <span>Overview</span>
+            <span>概览</span>
           </NavLink>
-          <NavLink className="navigation-link" to="/networks" aria-label="Network registry">
+          <NavLink className="navigation-link" to="/networks" aria-label="网络注册表">
             <Boxes size={17} />
-            <span>Networks</span>
+            <span>网络</span>
           </NavLink>
 
-          <span className="navigation-label navigation-label--spaced">Selected network</span>
+          <span className="navigation-label navigation-label--spaced">当前网络</span>
           {selectedNetworkId ? (
             <>
               <NavLink
@@ -105,25 +105,25 @@ export function AppShell() {
                 to={`/networks/${encodeURIComponent(selectedNetworkId)}/topology`}
               >
                 <Network size={17} />
-                <span>Topology</span>
+                <span>拓扑</span>
               </NavLink>
               <NavLink
                 className="navigation-link"
                 to={`/networks/${encodeURIComponent(selectedNetworkId)}/nodes`}
               >
                 <Server size={17} />
-                <span>Nodes</span>
+                <span>节点</span>
               </NavLink>
             </>
           ) : (
             <>
               <div className="navigation-link navigation-link--disabled">
                 <Network size={17} />
-                <span>Topology</span>
+                <span>拓扑</span>
               </div>
               <div className="navigation-link navigation-link--disabled">
                 <Server size={17} />
-                <span>Nodes</span>
+                <span>节点</span>
               </div>
             </>
           )}
@@ -131,14 +131,14 @@ export function AppShell() {
             <div className="navigation-link navigation-link--disabled" key={label}>
               <Icon size={17} />
               <span>{label}</span>
-              <span className="navigation-soon">soon</span>
+              <span className="navigation-soon">待开放</span>
             </div>
           ))}
         </nav>
 
         <div className="sidebar-footer">
           <Settings2 size={15} />
-          <span>Platform settings</span>
+          <span>平台设置</span>
           <span className="sidebar-footer__version">v0.1</span>
         </div>
       </aside>
@@ -146,8 +146,8 @@ export function AppShell() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <span className="topbar-kicker">Multi-network operations</span>
-            <span className="topbar-title">Infrastructure observatory</span>
+            <span className="topbar-kicker">多网络运维</span>
+            <span className="topbar-title">基础设施观测台</span>
           </div>
           <div className={`topbar-status topbar-status--${healthState}`}>
             <span className="topbar-status__pulse" />
@@ -157,30 +157,30 @@ export function AppShell() {
         <div className="workspace-content">
           <Outlet />
         </div>
-        <nav className="mobile-nav" aria-label="Mobile navigation">
-          <NavLink to="/" end aria-label="Fleet overview">
+        <nav className="mobile-nav" aria-label="移动端导航">
+          <NavLink to="/" end aria-label="集群概览">
             <LayoutDashboard size={18} />
-            <span>Overview</span>
+            <span>概览</span>
           </NavLink>
-          <NavLink to="/networks" aria-label="Network registry">
+          <NavLink to="/networks" aria-label="网络注册表">
             <Boxes size={18} />
-            <span>Networks</span>
+            <span>网络</span>
           </NavLink>
           {selectedNetworkId ? (
             <>
               <NavLink
                 to={`/networks/${encodeURIComponent(selectedNetworkId)}/topology`}
-                aria-label="Selected network topology"
+                aria-label="当前网络拓扑"
               >
                 <Network size={18} />
-                <span>Topology</span>
+                <span>拓扑</span>
               </NavLink>
               <NavLink
                 to={`/networks/${encodeURIComponent(selectedNetworkId)}/nodes`}
-                aria-label="Selected network nodes"
+                aria-label="当前网络节点"
               >
                 <Server size={18} />
-                <span>Nodes</span>
+                <span>节点</span>
               </NavLink>
             </>
           ) : null}

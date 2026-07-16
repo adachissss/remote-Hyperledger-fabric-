@@ -12,8 +12,14 @@ import {
 } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 
-import { ControlPlaneApiError, getNetworkNodes, getNetworkTopology } from '../../api/control-plane';
+import { getNetworkNodes, getNetworkTopology } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
+import {
+  getApiErrorMessage,
+  getOrganizationName,
+  getOrganizationTypeLabel,
+  getRuntimeStateLabel,
+} from '../../i18n/zh-CN';
 import { NetworkDetailHeader } from './NetworkDetailHeader';
 
 const nodeIcons = {
@@ -54,12 +60,12 @@ export function NetworkTopologyPage() {
       <NetworkDetailHeader
         networkId={networkId}
         displayName={topology?.networkName ?? networkId}
-        eyebrow="Network topology"
-        title={topology?.networkName ?? 'Resolving network topology'}
+        eyebrow="网络拓扑"
+        title={topology?.networkName ?? '正在解析网络拓扑'}
         description={
           topology
-            ? `${topology.domain} · Docker network ${topology.dockerNetwork}`
-            : 'Loading the configured organizations, nodes, and channels.'
+            ? `${topology.domain} · Docker 网络 ${topology.dockerNetwork}`
+            : '正在加载已配置的组织、节点和通道。'
         }
         refreshing={topologyQuery.isFetching || nodesQuery.isFetching}
         onRefresh={refresh}
@@ -69,28 +75,28 @@ export function NetworkTopologyPage() {
         <div className="query-state topology-state" role="status">
           <span className="query-state__spinner" aria-hidden="true" />
           <div>
-            <h3>Loading configured topology</h3>
-            <p>Resolving the selected network definition.</p>
+            <h3>正在加载已配置拓扑</h3>
+            <p>正在解析当前网络定义。</p>
           </div>
         </div>
       ) : topologyError || !topology ? (
         <div className="query-state query-state--error topology-state" role="alert">
           <div>
-            <h3>Topology unavailable</h3>
-            <p>{apiErrorMessage(topologyError)}</p>
+            <h3>网络拓扑不可用</h3>
+            <p>{getApiErrorMessage(topologyError, '控制平面无法加载该网络。')}</p>
           </div>
           <button className="secondary-action" type="button" onClick={refresh}>
-            Retry
+            重试
           </button>
         </div>
       ) : (
         <>
-          <section className="topology-metrics" aria-label="Topology summary">
-            <TopologyMetric label="Organizations" value={topology.organizations.length} icon={Building2} />
-            <TopologyMetric label="Configured nodes" value={topology.nodes.length} icon={CircleDot} />
-            <TopologyMetric label="Channels" value={topology.channels.length} icon={Cable} />
+          <section className="topology-metrics" aria-label="拓扑摘要">
+            <TopologyMetric label="组织" value={topology.organizations.length} icon={Building2} />
+            <TopologyMetric label="已配置节点" value={topology.nodes.length} icon={CircleDot} />
+            <TopologyMetric label="通道" value={topology.channels.length} icon={Cable} />
             <TopologyMetric
-              label="Containers running"
+              label="运行中容器"
               value={nodesQuery.data ? `${nodesQuery.data.running}/${nodesQuery.data.total}` : '—'}
               icon={Network}
             />
@@ -98,15 +104,15 @@ export function NetworkTopologyPage() {
 
           {nodesQuery.isError ? (
             <div className="runtime-notice runtime-notice--warning" role="status">
-              Live node state is unavailable. Configured topology remains visible.
+              实时节点状态不可用，已配置拓扑仍可正常查看。
             </div>
           ) : !nodesQuery.isPending && nodesQuery.data && !nodesQuery.data.dockerAvailable ? (
             <div className="runtime-notice runtime-notice--warning" role="status">
-              Docker is unavailable to the control plane. Configured topology remains visible.
+              控制平面无法访问 Docker，已配置拓扑仍可正常查看。
             </div>
           ) : null}
 
-          <Panel eyebrow="Configured graph" title="Organizations and nodes" className="topology-panel">
+          <Panel eyebrow="配置拓扑图" title="组织与节点" className="topology-panel">
             <div className="topology-root">
               <div className="topology-root__signal" aria-hidden="true">
                 <Network size={20} />
@@ -115,7 +121,9 @@ export function NetworkTopologyPage() {
                 <strong>{topology.networkName}</strong>
                 <span>{topology.dockerNetwork}</span>
               </div>
-              <span className="topology-root__tls">TLS {topology.tlsEnabled ? 'enabled' : 'disabled'}</span>
+              <span className="topology-root__tls">
+                TLS {topology.tlsEnabled ? '已启用' : '已停用'}
+              </span>
             </div>
 
             <div className="organization-stack">
@@ -131,12 +139,12 @@ export function NetworkTopologyPage() {
                         <Building2 size={17} />
                       </div>
                       <div>
-                        <strong>{organization.name}</strong>
+                        <strong>{getOrganizationName(organization.name)}</strong>
                         <span>
                           {organization.mspId} · {organization.domain}
                         </span>
                       </div>
-                      <span>{organization.type}</span>
+                      <span>{getOrganizationTypeLabel(organization.type)}</span>
                     </header>
                     <div className="organization-lane__nodes">
                       {organizationNodes.map((node) => {
@@ -158,7 +166,7 @@ export function NetworkTopologyPage() {
                               <strong>{node.name}</strong>
                               <small>{node.containerName}</small>
                             </span>
-                            <em>{runtimeState}</em>
+                            <em>{getRuntimeStateLabel(runtimeState)}</em>
                           </Link>
                         );
                       })}
@@ -169,9 +177,9 @@ export function NetworkTopologyPage() {
             </div>
           </Panel>
 
-          <Panel eyebrow="Ledger membership" title="Configured channels">
+          <Panel eyebrow="账本成员关系" title="已配置通道">
             {topology.channels.length === 0 ? (
-              <div className="channel-empty">No channels are declared in this network configuration.</div>
+              <div className="channel-empty">该网络配置中未声明通道。</div>
             ) : (
               <div className="channel-list">
                 {topology.channels.map((channel) => (
@@ -179,7 +187,7 @@ export function NetworkTopologyPage() {
                     <Cable size={17} />
                     <div>
                       <strong>{channel.name}</strong>
-                      <span>{channel.profile ?? 'No profile declared'}</span>
+                      <span>{channel.profile ?? '未声明通道配置模板'}</span>
                     </div>
                     <div className="channel-row__members">
                       {channel.memberOrganizations.map((organization) => (
@@ -213,10 +221,4 @@ function TopologyMetric({
       <strong>{value}</strong>
     </div>
   );
-}
-
-function apiErrorMessage(error: unknown): string {
-  return error instanceof ControlPlaneApiError
-    ? error.message
-    : 'The control plane could not load this network.';
 }

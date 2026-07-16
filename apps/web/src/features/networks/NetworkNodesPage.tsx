@@ -13,11 +13,20 @@ import {
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 
 import {
-  ControlPlaneApiError,
   getNetworkNodes,
   getNetworkTopology,
 } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
+import {
+  formatDateTimeZh,
+  getApiErrorMessage,
+  getContainerStatusLabel,
+  getEndpointKindLabel,
+  getHealthLabel,
+  getOrganizationName,
+  getRuntimeReason,
+  getRuntimeStateLabel,
+} from '../../i18n/zh-CN';
 import { NetworkDetailHeader } from './NetworkDetailHeader';
 
 type NodeFilter = 'all' | 'running' | 'attention';
@@ -26,6 +35,12 @@ const nodeIcons = {
   peer: RadioTower,
   orderer: Box,
   ca: ShieldCheck,
+};
+
+const nodeFilterLabels: Record<NodeFilter, string> = {
+  all: '全部',
+  running: '运行中',
+  attention: '需关注',
 };
 
 export function NetworkNodesPage() {
@@ -92,12 +107,12 @@ export function NetworkNodesPage() {
       <NetworkDetailHeader
         networkId={networkId}
         displayName={topology?.networkName ?? networkId}
-        eyebrow="Runtime inventory"
-        title="Configured nodes"
+        eyebrow="运行状态清单"
+        title="已配置节点"
         description={
           topology
-            ? `${topology.domain} · Docker network ${topology.dockerNetwork}`
-            : 'Docker state for peers, orderers, and certificate authorities.'
+            ? `${topology.domain} · Docker 网络 ${topology.dockerNetwork}`
+            : '查看 Peer、Orderer 和证书颁发机构的 Docker 状态。'
         }
         refreshing={nodesQuery.isFetching || topologyQuery.isFetching}
         onRefresh={refresh}
@@ -107,49 +122,47 @@ export function NetworkNodesPage() {
         <div className="query-state topology-state" role="status">
           <span className="query-state__spinner" aria-hidden="true" />
           <div>
-            <h3>Observing configured containers</h3>
-            <p>Reading the selected network runtime.</p>
+            <h3>正在观测已配置容器</h3>
+            <p>正在读取当前网络的运行状态。</p>
           </div>
         </div>
       ) : nodesQuery.isError || !nodes ? (
         <div className="query-state query-state--error topology-state" role="alert">
           <div>
-            <h3>Node inventory unavailable</h3>
+            <h3>节点清单不可用</h3>
             <p>
-              {nodesQuery.error instanceof ControlPlaneApiError
-                ? nodesQuery.error.message
-                : 'The control plane could not load node state.'}
+              {getApiErrorMessage(nodesQuery.error, '控制平面无法加载节点状态。')}
             </p>
           </div>
           <button className="secondary-action" type="button" onClick={() => nodesQuery.refetch()}>
-            Retry
+            重试
           </button>
         </div>
       ) : (
         <>
-          <section className="node-summary" aria-label="Node runtime summary">
-            <NodeSummaryItem label="Configured" value={nodes.total} />
-            <NodeSummaryItem label="Running" value={nodes.running} tone="running" />
-            <NodeSummaryItem label="Stopped" value={nodes.stopped} tone="stopped" />
-            <NodeSummaryItem label="Missing" value={nodes.missing} tone="missing" />
+          <section className="node-summary" aria-label="节点运行状态摘要">
+            <NodeSummaryItem label="已配置" value={nodes.total} />
+            <NodeSummaryItem label="运行中" value={nodes.running} tone="running" />
+            <NodeSummaryItem label="已停止" value={nodes.stopped} tone="stopped" />
+            <NodeSummaryItem label="容器缺失" value={nodes.missing} tone="missing" />
             <div className={`docker-state docker-state--${nodes.dockerAvailable ? 'online' : 'offline'}`}>
               <Server size={16} />
-              <span>Docker {nodes.dockerAvailable ? 'connected' : 'unavailable'}</span>
+              <span>Docker {nodes.dockerAvailable ? '已连接' : '不可用'}</span>
             </div>
           </section>
 
           {!nodes.dockerAvailable ? (
             <div className="runtime-notice runtime-notice--warning" role="status">
               <CircleAlert size={17} />
-              Docker cannot be reached. Node definitions are shown without live container data.
+              无法连接 Docker，节点定义仍会显示，但不包含实时容器数据。
             </div>
           ) : null}
 
           <Panel
-            eyebrow={`Observed ${formatTimestamp(nodes.observedAt)}`}
-            title={`${filteredNodes.length} node${filteredNodes.length === 1 ? '' : 's'}`}
+            eyebrow={`观测时间 ${formatDateTimeZh(nodes.observedAt)}`}
+            title={`${filteredNodes.length} 个节点`}
             action={
-              <div className="node-filters" aria-label="Filter nodes">
+              <div className="node-filters" aria-label="筛选节点">
                 {(['all', 'running', 'attention'] as const).map((value) => (
                   <button
                     type="button"
@@ -158,14 +171,14 @@ export function NetworkNodesPage() {
                     aria-pressed={filter === value}
                     onClick={() => setFilter(value)}
                   >
-                    {value}
+                    {nodeFilterLabels[value]}
                   </button>
                 ))}
               </div>
             }
           >
             {filteredNodes.length === 0 ? (
-              <div className="channel-empty">No nodes match this status filter.</div>
+              <div className="channel-empty">没有节点符合当前状态筛选条件。</div>
             ) : (
               <div className="node-inventory">
                 {filteredNodes.map((node) => (
@@ -233,12 +246,12 @@ function NodeInventoryRow({
           <small>{node.containerName}</small>
         </span>
         <span className="node-inventory__org">
-          <strong>{node.organizationName}</strong>
+          <strong>{getOrganizationName(node.organizationName)}</strong>
           <small>{node.mspId}</small>
         </span>
-        <span className="node-inventory__image">{node.runtime.image ?? 'No image observed'}</span>
+        <span className="node-inventory__image">{node.runtime.image ?? '未观测到镜像'}</span>
         <span className={`node-state-label node-state-label--${node.runtime.state}`}>
-          {node.runtime.state}
+          {getRuntimeStateLabel(node.runtime.state)}
         </span>
         <ChevronDown size={17} className="node-inventory__chevron" />
       </button>
@@ -254,37 +267,38 @@ function NodeRuntimeDetails({ node }: { node: NetworkNode }) {
       {node.runtime.degradedReason ? (
         <div className="node-runtime-detail__warning">
           <CircleAlert size={15} />
-          {node.runtime.degradedReason}
+          {getRuntimeReason(node.runtime.degradedReason)}
         </div>
       ) : null}
       <dl>
-        <RuntimeField label="Container ID" value={shortContainerId(node.runtime.containerId)} mono />
-        <RuntimeField label="Docker status" value={node.runtime.status} />
-        <RuntimeField label="Health" value={node.runtime.health} />
-        <RuntimeField label="IP address" value={node.runtime.ipAddress} mono />
+        <RuntimeField label="容器 ID" value={shortContainerId(node.runtime.containerId)} mono />
+        <RuntimeField label="Docker 状态" value={getContainerStatusLabel(node.runtime.status)} />
+        <RuntimeField label="健康状态" value={getHealthLabel(node.runtime.health)} />
+        <RuntimeField label="IP 地址" value={node.runtime.ipAddress} mono />
         <RuntimeField
-          label="Expected network"
+          label="目标网络"
           value={
             node.runtime.networkAttached === null
               ? null
               : node.runtime.networkAttached
-                ? 'attached'
-                : 'not attached'
+                ? '已接入'
+                : '未接入'
           }
         />
         <RuntimeField
-          label="Restarts"
+          label="重启次数"
           value={node.runtime.restartCount === null ? null : String(node.runtime.restartCount)}
         />
-        <RuntimeField label="Started" value={formatTimestamp(node.runtime.startedAt)} />
-        <RuntimeField label="Finished" value={formatTimestamp(node.runtime.finishedAt)} />
+        <RuntimeField label="启动时间" value={formatDateTimeZh(node.runtime.startedAt)} />
+        <RuntimeField label="结束时间" value={formatDateTimeZh(node.runtime.finishedAt)} />
       </dl>
       <div className="node-endpoints">
-        <span>Configured endpoints</span>
+        <span>已配置端点</span>
         <div>
           {node.endpoints.map((endpoint) => (
             <code key={`${endpoint.kind}-${endpoint.port}`}>
-              {endpoint.kind} · {endpoint.protocol}://{endpoint.host}:{endpoint.port}
+              {getEndpointKindLabel(endpoint.kind)} ·{' '}
+              {`${endpoint.protocol}://${endpoint.host}:${endpoint.port}`}
             </code>
           ))}
         </div>
@@ -305,17 +319,11 @@ function RuntimeField({
   return (
     <div>
       <dt>{label}</dt>
-      <dd className={mono ? 'mono-value' : undefined}>{value ?? 'unavailable'}</dd>
+      <dd className={mono ? 'mono-value' : undefined}>{value ?? '暂无数据'}</dd>
     </div>
   );
 }
 
 function shortContainerId(value: string | null): string | null {
   return value ? value.slice(0, 12) : null;
-}
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return 'unavailable';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }

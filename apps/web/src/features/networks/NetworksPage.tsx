@@ -5,8 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowRight, Boxes, Plus, ShieldAlert, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { ControlPlaneApiError, getNetworks, importNetwork } from '../../api/control-plane';
+import { getNetworks, importNetwork } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
+import {
+  getApiErrorMessage,
+  getManagementModeLabel,
+  getNetworkStatusLabel,
+} from '../../i18n/zh-CN';
 
 export function NetworksPage() {
   const queryClient = useQueryClient();
@@ -108,12 +113,9 @@ export function NetworksPage() {
     <div className="page-stack page-enter">
       <section className="page-heading">
         <div>
-          <span className="eyebrow">Network registry</span>
-          <h1>Independent networks, one inventory.</h1>
-          <p>
-            Every network owns its workspace, runtime namespace, credentials, versions, and
-            operation history.
-          </p>
+          <span className="eyebrow">网络注册表</span>
+          <h1>集中管理相互隔离的网络</h1>
+          <p>每个网络独立拥有工作区、运行命名空间、凭据、版本和运维历史。</p>
         </div>
         <div className="page-heading__actions">
           <button
@@ -125,10 +127,10 @@ export function NetworksPage() {
               setImportOpen(true);
             }}
           >
-            <ArrowDownToLine size={16} /> Import network
+            <ArrowDownToLine size={16} /> 导入网络
           </button>
-          <button className="primary-action" type="button" disabled title="Available in Phase 1">
-            <Plus size={16} /> Create network
+          <button className="primary-action" type="button" disabled title="后续阶段开放">
+            <Plus size={16} /> 创建网络
           </button>
         </div>
       </section>
@@ -136,44 +138,41 @@ export function NetworksPage() {
       <div className="registry-notice">
         <ShieldAlert size={18} />
         <span>
-          Imports are accepted only from workspace roots allowed by the API administrator. No
-          network is inferred from the repository or host environment.
+          仅允许从 API 管理员授权的工作区根目录导入网络。平台不会根据仓库或宿主机环境自动推断网络。
         </span>
       </div>
 
       <Panel
-        eyebrow="Inventory"
+        eyebrow="网络清单"
         title={
           networksQuery.isPending
-            ? 'Loading registered networks'
+            ? '正在加载已注册网络'
             : networksQuery.isError
-              ? 'Network registry unavailable'
-              : `${total ?? 0} registered network${total === 1 ? '' : 's'}`
+              ? '网络注册表不可用'
+              : `已注册 ${total ?? 0} 个网络`
         }
       >
         {networksQuery.isPending ? (
           <div className="network-table-empty" role="status" aria-live="polite">
             <span className="query-state__spinner" aria-hidden="true" />
-            <h3>Loading network definitions</h3>
+            <h3>正在加载网络定义</h3>
           </div>
         ) : networksQuery.isError ? (
           <div className="network-table-empty network-table-empty--error">
             <ShieldAlert size={30} strokeWidth={1.35} />
-            <h3>The registry request failed</h3>
+            <h3>网络注册表请求失败</h3>
             <p>
-              {networksQuery.error instanceof ControlPlaneApiError
-                ? networksQuery.error.message
-                : 'The control plane API could not be reached.'}
+              {getApiErrorMessage(networksQuery.error, '无法连接控制平面 API。')}
             </p>
             <button className="secondary-action" type="button" onClick={() => networksQuery.refetch()}>
-              Retry request
+              重新请求
             </button>
           </div>
         ) : networks.length === 0 ? (
           <div className="network-table-empty">
             <Boxes size={30} strokeWidth={1.35} />
-            <h3>No network definitions</h3>
-            <p>Import an existing workspace to add the first network.</p>
+            <h3>暂无网络定义</h3>
+            <p>导入已有工作区以添加第一个网络。</p>
           </div>
         ) : (
           <div className="network-list" role="list">
@@ -189,30 +188,32 @@ export function NetworksPage() {
                 </div>
                 <dl>
                   <div>
-                    <dt>Mode</dt>
-                    <dd>{network.managementMode}</dd>
+                    <dt>管理模式</dt>
+                    <dd>{getManagementModeLabel(network.managementMode)}</dd>
                   </div>
                   <div>
                     <dt>Fabric</dt>
-                    <dd>{network.fabricVersion ?? 'unknown'}</dd>
+                    <dd>{network.fabricVersion ?? '未标注'}</dd>
                   </div>
                   <div>
-                    <dt>Topology</dt>
+                    <dt>拓扑</dt>
                     <dd>
-                      {network.organizationCount} org / {network.nodeCount} nodes
+                      {network.organizationCount} 个组织 / {network.nodeCount} 个节点
                     </dd>
                   </div>
                   <div>
-                    <dt>Channels</dt>
+                    <dt>通道</dt>
                     <dd>{network.channelCount}</dd>
                   </div>
                 </dl>
-                <span className="network-row__runtime">{network.status}</span>
+                <span className="network-row__runtime">
+                  {getNetworkStatusLabel(network.status)}
+                </span>
                 <Link
                   className="network-row__open icon-button"
                   to={`/networks/${encodeURIComponent(network.id)}/topology`}
-                  aria-label={`Open ${network.displayName}`}
-                  title="Open network"
+                  aria-label={`打开网络 ${network.displayName}`}
+                  title="打开网络"
                 >
                   <ArrowRight size={17} />
                 </Link>
@@ -235,13 +236,13 @@ export function NetworksPage() {
           >
             <div className="import-dialog__heading">
               <div>
-                <span className="eyebrow">Existing workspace</span>
-                <h2 id="import-network-title">Import Fabric network</h2>
+                <span className="eyebrow">现有工作区</span>
+                <h2 id="import-network-title">导入 Fabric 网络</h2>
               </div>
               <button
                 className="icon-button"
                 type="button"
-                aria-label="Close import dialog"
+                aria-label="关闭导入对话框"
                 onClick={closeImportDialog}
               >
                 <X size={18} />
@@ -254,21 +255,22 @@ export function NetworksPage() {
               aria-busy={importMutation.isPending}
             >
               <label>
-                <span>Network ID</span>
+                <span>网络 ID</span>
                 <input
                   name="id"
                   required
                   pattern="[a-z][a-z0-9-]*[a-z0-9]"
                   minLength={3}
                   maxLength={64}
+                  title="使用小写字母、数字和连字符，长度为 3 到 64 个字符"
                   aria-describedby="network-id-hint"
                   value={form.id}
                   onChange={(event) => setForm({ ...form, id: event.target.value })}
                 />
-                <small id="network-id-hint">Lowercase letters, numbers, and hyphens.</small>
+                <small id="network-id-hint">使用小写字母、数字和连字符。</small>
               </label>
               <label>
-                <span>Display name</span>
+                <span>显示名称</span>
                 <input
                   name="displayName"
                   required
@@ -278,7 +280,7 @@ export function NetworksPage() {
                 />
               </label>
               <label className="import-form__wide">
-                <span>Workspace root</span>
+                <span>工作区根目录</span>
                 <input
                   name="workspaceRoot"
                   required
@@ -287,11 +289,11 @@ export function NetworksPage() {
                   onChange={(event) => setForm({ ...form, workspaceRoot: event.target.value })}
                 />
                 <small id="workspace-root-hint">
-                  Must be inside a server-side allowed network root.
+                  必须位于服务端管理员允许的网络根目录内。
                 </small>
               </label>
               <label>
-                <span>Config path</span>
+                <span>配置路径</span>
                 <input
                   name="configPath"
                   required
@@ -299,20 +301,21 @@ export function NetworksPage() {
                   value={form.configPath}
                   onChange={(event) => setForm({ ...form, configPath: event.target.value })}
                 />
-                <small id="config-path-hint">Relative to the workspace root.</small>
+                <small id="config-path-hint">相对于工作区根目录。</small>
               </label>
               <label>
-                <span>Compose project</span>
+                <span>Compose 项目名</span>
                 <input
                   name="composeProject"
                   required
                   pattern="[a-z0-9][a-z0-9_-]*"
+                  title="使用小写字母、数字、下划线和连字符"
                   value={form.composeProject}
                   onChange={(event) => setForm({ ...form, composeProject: event.target.value })}
                 />
               </label>
               <label>
-                <span>Fabric version</span>
+                <span>Fabric 版本</span>
                 <input
                   name="fabricVersion"
                   value={form.fabricVersion}
@@ -320,7 +323,7 @@ export function NetworksPage() {
                 />
               </label>
               <label>
-                <span>Fabric CA version</span>
+                <span>Fabric CA 版本</span>
                 <input
                   name="fabricCaVersion"
                   value={form.fabricCaVersion}
@@ -332,9 +335,7 @@ export function NetworksPage() {
                 <div className="form-error" role="alert">
                   <ShieldAlert size={16} />
                   <span>
-                    {importMutation.error instanceof ControlPlaneApiError
-                      ? importMutation.error.message
-                      : 'The network could not be imported.'}
+                    {getApiErrorMessage(importMutation.error, '无法导入该网络。')}
                   </span>
                 </div>
               ) : null}
@@ -345,10 +346,10 @@ export function NetworksPage() {
                   type="button"
                   onClick={closeImportDialog}
                 >
-                  Cancel
+                  取消
                 </button>
                 <button className="primary-action" type="submit" disabled={importMutation.isPending}>
-                  {importMutation.isPending ? 'Validating…' : 'Import network'}
+                  {importMutation.isPending ? '正在校验…' : '导入网络'}
                 </button>
               </div>
             </form>

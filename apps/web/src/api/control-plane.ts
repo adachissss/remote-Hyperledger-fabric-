@@ -45,7 +45,7 @@ async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
     throw new ControlPlaneApiError(
       typeof errorPayload?.message === 'string'
         ? errorPayload.message
-        : `Control plane request failed with status ${response.status}.`,
+        : `控制平面请求失败，状态码 ${response.status}。`,
       response.status,
       typeof errorPayload?.error === 'string' ? errorPayload.error : null,
     );
@@ -99,7 +99,7 @@ export async function getNetworkNode(networkId: string, nodeId: string): Promise
 function assertNetworkScope(requestedNetworkId: string, responseNetworkId: string): void {
   if (requestedNetworkId !== responseNetworkId) {
     throw new ControlPlaneApiError(
-      'The control plane returned data for a different network.',
+      '控制平面返回了其他网络的数据。',
       502,
       'network_scope_mismatch',
     );

@@ -27,7 +27,7 @@ export function NetworkDetailHeader({
       <section className="network-detail-heading">
         <div>
           <div className="network-breadcrumb">
-            <Link to="/networks">Networks</Link>
+            <Link to="/networks">网络</Link>
             <span>/</span>
             <strong>{displayName}</strong>
           </div>
@@ -39,17 +39,17 @@ export function NetworkDetailHeader({
           className="icon-button network-refresh"
           type="button"
           onClick={onRefresh}
-          aria-label="Refresh network data"
-          title="Refresh"
+          aria-label="刷新网络数据"
+          title="刷新"
           disabled={refreshing}
         >
           <RefreshCw size={17} className={refreshing ? 'icon-spin' : undefined} />
         </button>
       </section>
 
-      <nav className="network-tabs" aria-label="Selected network views">
-        <NavLink to={`/networks/${encodedNetworkId}/topology`}>Topology</NavLink>
-        <NavLink to={`/networks/${encodedNetworkId}/nodes`}>Nodes</NavLink>
+      <nav className="network-tabs" aria-label="当前网络视图">
+        <NavLink to={`/networks/${encodedNetworkId}/topology`}>拓扑</NavLink>
+        <NavLink to={`/networks/${encodedNetworkId}/nodes`}>节点</NavLink>
       </nav>
     </>
   );
