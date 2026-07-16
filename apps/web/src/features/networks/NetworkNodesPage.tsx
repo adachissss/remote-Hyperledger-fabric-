@@ -145,6 +145,11 @@ export function NetworkNodesPage() {
             <NodeSummaryItem label="运行中" value={nodes.running} tone="running" />
             <NodeSummaryItem label="已停止" value={nodes.stopped} tone="stopped" />
             <NodeSummaryItem label="容器缺失" value={nodes.missing} tone="missing" />
+            <NodeSummaryItem
+              label="服务可达"
+              value={`${nodes.reachable}/${nodes.total}`}
+              tone="running"
+            />
             <div className={`docker-state docker-state--${nodes.dockerAvailable ? 'online' : 'offline'}`}>
               <Server size={16} />
               <span>Docker {nodes.dockerAvailable ? '已连接' : '不可用'}</span>
@@ -206,7 +211,7 @@ function NodeSummaryItem({
   tone = 'neutral',
 }: {
   label: string;
-  value: number;
+  value: string | number;
   tone?: 'neutral' | 'running' | 'stopped' | 'missing';
 }) {
   return (
@@ -274,6 +279,16 @@ function NodeRuntimeDetails({ node }: { node: NetworkNode }) {
         <RuntimeField label="容器 ID" value={shortContainerId(node.runtime.containerId)} mono />
         <RuntimeField label="Docker 状态" value={getContainerStatusLabel(node.runtime.status)} />
         <RuntimeField label="健康状态" value={getHealthLabel(node.runtime.health)} />
+        <RuntimeField
+          label="服务端口"
+          value={
+            node.runtime.serviceReachable === null
+              ? '尚未探测'
+              : node.runtime.serviceReachable
+                ? '可达'
+                : '不可达'
+          }
+        />
         <RuntimeField label="IP 地址" value={node.runtime.ipAddress} mono />
         <RuntimeField
           label="目标网络"

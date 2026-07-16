@@ -25,6 +25,7 @@
 - [x] 解析每个网络脱敏后的配置；
 - [ ] 封装 `export-network-info.sh`；
 - [x] Docker 容器状态、镜像、IP、端口和时间；
+- [x] Peer、Orderer 与 CA 主服务端口的 TCP 可达性探测及降级展示；
 - [x] Fleet Overview、URL 驱动的 Network Selector、Topology 和 Nodes 页面；
 - [x] Configuration 页面；
 - [x] 定时刷新和错误降级展示。
@@ -37,7 +38,7 @@
 
 - [ ] Job/JobStep 数据模型；
 - [ ] managed network 独立工作区、Compose project、Docker network 和端口冲突检查；
-- [ ] 将当前单工作区脚本适配为通用 `fabric-compose` driver；
+- [ ] 将当前单工作区脚本适配为通用 `fabric-compose` driver，并保留原脚本命令入口；
 - [ ] 安全子进程执行器；
 - [ ] SSE 实时日志；
 - [ ] up、stop、restart；

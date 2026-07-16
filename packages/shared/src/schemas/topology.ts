@@ -66,6 +66,7 @@ export const NetworkNodeRuntimeStateSchema = z.enum([
   'running',
   'paused',
   'restarting',
+  'degraded',
   'exited',
   'dead',
   'unknown',
@@ -76,7 +77,7 @@ export const NetworkNodeRuntimeSchema = z.object({
   dockerAvailable: z.boolean(),
   containerExists: z.boolean(),
   containerRunning: z.boolean(),
-  serviceReachable: z.null(),
+  serviceReachable: z.boolean().nullable(),
   fabricReady: z.null(),
   status: z.string().nullable(),
   health: z.string().nullable(),
@@ -103,6 +104,8 @@ export const NetworkNodeListResponseSchema = z.object({
   running: z.number().int().nonnegative(),
   stopped: z.number().int().nonnegative(),
   missing: z.number().int().nonnegative(),
+  reachable: z.number().int().nonnegative(),
+  unreachable: z.number().int().nonnegative(),
 });
 
 export type NetworkNodeId = z.infer<typeof NetworkNodeIdSchema>;

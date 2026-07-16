@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -15,6 +16,7 @@ import {
 import { buildApp } from './app.js';
 import { loadConfig, type AppConfig } from './config.js';
 import type { DockerRuntime } from './modules/networks/docker-runtime.js';
+import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -53,6 +55,20 @@ const unavailableDockerRuntime: DockerRuntime = {
   },
   async inspectContainer() {
     throw new Error('inspect must not run when Docker is unavailable');
+  },
+};
+
+const reachableServiceProbe: ServiceProbe = {
+  async probe(target) {
+    assert.equal(target.host, '127.0.0.1');
+    assert.equal(target.timeoutMs, 1_500);
+    return { reachable: true, latencyMs: 2 };
+  },
+};
+
+const unreachableServiceProbe: ServiceProbe = {
+  async probe() {
+    return { reachable: false, latencyMs: null };
   },
 };
 
@@ -102,6 +118,34 @@ test('unknown routes return a stable JSON error', async () => {
 
 test('invalid environment configuration fails before the server starts', () => {
   assert.throws(() => loadConfig({ CONTROL_PLANE_PORT: 'not-a-port' }));
+});
+
+test('TCP service probe distinguishes reachable and closed ports', async () => {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert(address && typeof address === 'object');
+
+  const probe = new TcpServiceProbe();
+  const reachable = await probe.probe({
+    host: '127.0.0.1',
+    port: address.port,
+    timeoutMs: 500,
+  });
+  assert.equal(reachable.reachable, true);
+
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+  const unreachable = await probe.probe({
+    host: '127.0.0.1',
+    port: address.port,
+    timeoutMs: 500,
+  });
+  assert.equal(unreachable.reachable, false);
 });
 
 test('network import is disabled until an administrator allows workspace roots', async () => {
@@ -175,7 +219,10 @@ channels:
   });
 
   try {
-    const app = await buildApp(config, { dockerRuntime: observableDockerRuntime });
+    const app = await buildApp(config, {
+      dockerRuntime: observableDockerRuntime,
+      serviceProbe: reachableServiceProbe,
+    });
     try {
       const importResponse = await app.inject({
         method: 'POST',
@@ -242,6 +289,8 @@ channels:
       assert.equal(nodes.running, 1);
       assert.equal(nodes.missing, 3);
       assert.equal(nodes.dockerAvailable, true);
+      assert.equal(nodes.reachable, 1);
+      assert.equal(nodes.unreachable, 3);
 
       const nodeResponse = await app.inject({
         method: 'GET',
@@ -250,6 +299,7 @@ channels:
       assert.equal(nodeResponse.statusCode, 200);
       const orderer = NetworkNodeSchema.parse(nodeResponse.json());
       assert.equal(orderer.runtime.state, 'running');
+      assert.equal(orderer.runtime.serviceReachable, true);
       assert.equal(orderer.runtime.networkAttached, true);
       assert.equal(orderer.runtime.ipAddress, '172.20.0.2');
 
@@ -298,6 +348,23 @@ channels:
       await app.close();
     }
 
+    const degradedApp = await buildApp(config, {
+      dockerRuntime: observableDockerRuntime,
+      serviceProbe: unreachableServiceProbe,
+    });
+    try {
+      const degradedResponse = await degradedApp.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/nodes/orderer1.network-a.test',
+      });
+      const degradedOrderer = NetworkNodeSchema.parse(degradedResponse.json());
+      assert.equal(degradedOrderer.runtime.containerRunning, true);
+      assert.equal(degradedOrderer.runtime.serviceReachable, false);
+      assert.equal(degradedOrderer.runtime.state, 'degraded');
+    } finally {
+      await degradedApp.close();
+    }
+
     const restartedApp = await buildApp(config, { dockerRuntime: unavailableDockerRuntime });
     try {
       const persistedResponse = await restartedApp.inject({
@@ -321,6 +388,8 @@ channels:
       assert.equal(unavailableNodes.dockerAvailable, false);
       assert.equal(unavailableNodes.items[0]?.runtime.state, 'docker-unavailable');
       assert.equal(unavailableNodes.missing, 0);
+      assert.equal(unavailableNodes.reachable, 0);
+      assert.equal(unavailableNodes.unreachable, 0);
     } finally {
       await restartedApp.close();
     }

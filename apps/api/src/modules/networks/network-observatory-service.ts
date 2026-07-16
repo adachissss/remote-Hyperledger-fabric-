@@ -14,11 +14,13 @@ import type {
   DockerRuntimeProbe,
 } from './docker-runtime.js';
 import { NetworkImportError, type NetworkImportService } from './network-import-service.js';
+import type { ServiceProbe } from './service-probe.js';
 
 export class NetworkObservatoryService {
   constructor(
     private readonly networkImportService: NetworkImportService,
     private readonly dockerRuntime: DockerRuntime,
+    private readonly serviceProbe: ServiceProbe,
   ) {}
 
   async getTopology(networkId: string): Promise<NetworkTopologyResponse> {
@@ -44,6 +46,8 @@ export class NetworkObservatoryService {
         (item) => item.runtime.containerExists && !item.runtime.containerRunning,
       ).length,
       missing: items.filter((item) => item.runtime.state === 'missing').length,
+      reachable: items.filter((item) => item.runtime.serviceReachable === true).length,
+      unreachable: items.filter((item) => item.runtime.serviceReachable === false).length,
     });
   }
 
@@ -79,10 +83,10 @@ export class NetworkObservatoryService {
         node.containerName,
         dockerNetwork,
       );
-      return NetworkNodeSchema.parse({
-        ...node,
-        runtime: observation ? observedRuntime(observation) : missingRuntime(),
-      });
+      const runtime = observation
+        ? await this.withServiceReachability(node, observedRuntime(observation))
+        : missingRuntime();
+      return NetworkNodeSchema.parse({ ...node, runtime });
     } catch {
       return NetworkNodeSchema.parse({
         ...node,
@@ -91,6 +95,43 @@ export class NetworkObservatoryService {
         ),
       });
     }
+  }
+
+  private async withServiceReachability(
+    node: NetworkTopologyResponse['nodes'][number],
+    runtime: NetworkNodeRuntime,
+  ): Promise<NetworkNodeRuntime> {
+    if (!runtime.containerRunning) {
+      return { ...runtime, serviceReachable: false };
+    }
+
+    const endpoint = node.endpoints.find((candidate) =>
+      node.type === 'ca' ? candidate.kind === 'ca' : candidate.kind === 'grpc',
+    );
+    if (!endpoint) return runtime;
+
+    let reachable = false;
+    try {
+      reachable = (
+        await this.serviceProbe.probe({
+          host: '127.0.0.1',
+          port: endpoint.port,
+          timeoutMs: 1_500,
+        })
+      ).reachable;
+    } catch {
+      reachable = false;
+    }
+
+    return {
+      ...runtime,
+      state: reachable ? runtime.state : 'degraded',
+      serviceReachable: reachable,
+      degradedReason: reachable
+        ? runtime.degradedReason
+        : runtime.degradedReason ??
+          `The container is running, but its ${endpoint.kind} service port is unreachable.`,
+    };
   }
 }
 
@@ -121,7 +162,7 @@ function missingRuntime(): NetworkNodeRuntime {
     dockerAvailable: true,
     containerExists: false,
     containerRunning: false,
-    serviceReachable: null,
+    serviceReachable: false,
     fabricReady: null,
     status: null,
     health: null,
@@ -137,7 +178,7 @@ function missingRuntime(): NetworkNodeRuntime {
 }
 
 function observedRuntime(observation: DockerContainerObservation): NetworkNodeRuntime {
-  const state = runtimeState(observation);
+  const observedState = runtimeState(observation);
   const networkReason = observation.networkAttached
     ? null
     : 'The container is not attached to the network registered for this Fabric network.';
@@ -147,7 +188,10 @@ function observedRuntime(observation: DockerContainerObservation): NetworkNodeRu
       : null;
 
   return {
-    state,
+    state:
+      observation.running && (networkReason !== null || healthReason !== null)
+        ? 'degraded'
+        : observedState,
     dockerAvailable: true,
     containerExists: true,
     containerRunning: observation.running,

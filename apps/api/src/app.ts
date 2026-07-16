@@ -7,10 +7,12 @@ import { NetworkImportService } from './modules/networks/network-import-service.
 import { NetworkObservatoryService } from './modules/networks/network-observatory-service.js';
 import { createNetworkRegistry } from './modules/networks/network-registry.js';
 import { registerNetworkRoutes } from './modules/networks/network-routes.js';
+import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
 import { registerSystemRoutes } from './modules/system/system-routes.js';
 
 export type AppDependencies = {
   dockerRuntime?: DockerRuntime;
+  serviceProbe?: ServiceProbe;
 };
 
 export async function buildApp(
@@ -36,6 +38,7 @@ export async function buildApp(
   const networkObservatoryService = new NetworkObservatoryService(
     networkImportService,
     dependencies.dockerRuntime ?? new DockerCliRuntime(),
+    dependencies.serviceProbe ?? new TcpServiceProbe(),
   );
 
   app.addHook('onClose', async () => {

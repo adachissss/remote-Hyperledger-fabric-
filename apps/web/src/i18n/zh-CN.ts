@@ -33,6 +33,7 @@ const runtimeStateLabels: Record<NetworkNodeRuntimeState, string> = {
   running: '运行中',
   paused: '已暂停',
   restarting: '重启中',
+  degraded: '服务降级',
   exited: '已退出',
   dead: '已失效',
   unknown: '未知',
@@ -134,6 +135,9 @@ export function getRuntimeReason(reason: string | null): string | null {
   if (reason.includes('container does not exist')) return '节点已配置，但对应的 Docker 容器不存在。';
   if (reason.includes('not attached to the network')) return '容器未接入该 Fabric 网络配置的 Docker 网络。';
   if (reason.includes('container health as')) return 'Docker 报告该容器的健康状态异常。';
+  if (reason.includes('service port is unreachable')) {
+    return '容器正在运行，但节点主服务端口不可达。';
+  }
   return '节点运行状态异常，请检查 Docker 容器详情。';
 }
 

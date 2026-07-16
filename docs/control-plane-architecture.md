@@ -134,7 +134,7 @@ interface NetworkDriver {
 - 锁按 `networkId` 隔离，不同网络的作业可以并行；
 - Fabric/CA 版本属于网络定义，不使用平台级单一硬编码版本。
 
-当前脚本仍把仓库根目录当作唯一运行目录。进入多 managed network 阶段前，需要把“平台源码目录”和“网络实例工作区”分离，所有生成路径必须由 driver 显式传入。
+当前脚本仍把仓库根目录当作唯一运行目录。进入多 managed network 阶段前，需要把“平台源码目录”和“网络实例工作区”分离，所有生成路径必须由 driver 显式传入。`network.sh`、现有 Docker Compose 与链码脚本继续作为可独立使用的命令行入口；控制平面只在 driver 中增加参数校验、作业编排和日志适配，不替换这些脚本，也不要求必须通过网页启动网络。
 
 ### 6.2 Topology and Node Status
 
@@ -149,11 +149,11 @@ interface NetworkDriver {
 
 - `configured`：配置中存在；
 - `containerRunning`：容器运行；
-- `serviceReachable`：端口/gRPC 可达；
+- `serviceReachable`：节点主服务端口 TCP 可达；
 - `fabricReady`：能够完成 Fabric 级查询；
 - `degradedReason`：明确说明失败层级。
 
-当前只读观测阶段已实现 `configured` 和 `containerRunning`，并返回经过白名单筛选的容器状态、健康、镜像、IP、端口和时间。`serviceReachable` 与 `fabricReady` 在 API 中明确返回 `null`，待后续加入 gRPC、CA 和 Fabric 级探测后再赋值，不用容器运行状态冒充 Fabric 就绪状态。
+当前只读观测阶段已实现 `configured`、`containerRunning` 和 `serviceReachable`，并返回经过白名单筛选的容器状态、健康、镜像、IP、端口和时间。对于本机 `fabric-compose` driver，控制平面通过宿主机暴露端口探测 Peer/Orderer 的 gRPC 主端口与 CA 服务端口；容器运行但端口不可达时标记为 `degraded`。该探测只证明 TCP 连接可建立，`fabricReady` 仍明确返回 `null`，待后续完成带身份与 TLS 的 Fabric 级查询后再赋值，不用端口连通状态冒充 Fabric 就绪状态。
 
 ### 6.3 Job Service
 
