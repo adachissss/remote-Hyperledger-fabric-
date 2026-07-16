@@ -26,7 +26,7 @@
 - [ ] 封装 `export-network-info.sh`；
 - [x] Docker 容器状态、镜像、IP、端口和时间；
 - [x] Fleet Overview、URL 驱动的 Network Selector、Topology 和 Nodes 页面；
-- [ ] Configuration 页面；
+- [x] Configuration 页面；
 - [x] 定时刷新和错误降级展示。
 
 验收：至少两个名称和拓扑不同的网络可以同时注册；停止和运行状态均能正确展示，不串用配置、容器或凭据，也不返回密码和私钥。

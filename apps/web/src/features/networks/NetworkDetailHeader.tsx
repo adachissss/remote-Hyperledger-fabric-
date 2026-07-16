@@ -50,6 +50,7 @@ export function NetworkDetailHeader({
       <nav className="network-tabs" aria-label="当前网络视图">
         <NavLink to={`/networks/${encodedNetworkId}/topology`}>拓扑</NavLink>
         <NavLink to={`/networks/${encodedNetworkId}/nodes`}>节点</NavLink>
+        <NavLink to={`/networks/${encodedNetworkId}/configuration`}>配置</NavLink>
       </nav>
     </>
   );

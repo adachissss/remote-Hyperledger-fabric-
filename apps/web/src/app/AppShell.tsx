@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircuitBoard,
   Gauge,
+  FileCog,
   LayoutDashboard,
   Network,
   Server,
@@ -92,7 +93,7 @@ export function AppShell() {
             <LayoutDashboard size={17} />
             <span>概览</span>
           </NavLink>
-          <NavLink className="navigation-link" to="/networks" aria-label="网络注册表">
+          <NavLink className="navigation-link" to="/networks" end aria-label="网络注册表">
             <Boxes size={17} />
             <span>网络</span>
           </NavLink>
@@ -114,6 +115,13 @@ export function AppShell() {
                 <Server size={17} />
                 <span>节点</span>
               </NavLink>
+              <NavLink
+                className="navigation-link"
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/configuration`}
+              >
+                <FileCog size={17} />
+                <span>配置</span>
+              </NavLink>
             </>
           ) : (
             <>
@@ -124,6 +132,10 @@ export function AppShell() {
               <div className="navigation-link navigation-link--disabled">
                 <Server size={17} />
                 <span>节点</span>
+              </div>
+              <div className="navigation-link navigation-link--disabled">
+                <FileCog size={17} />
+                <span>配置</span>
               </div>
             </>
           )}
@@ -162,7 +174,7 @@ export function AppShell() {
             <LayoutDashboard size={18} />
             <span>概览</span>
           </NavLink>
-          <NavLink to="/networks" aria-label="网络注册表">
+          <NavLink to="/networks" end aria-label="网络注册表">
             <Boxes size={18} />
             <span>网络</span>
           </NavLink>
@@ -181,6 +193,13 @@ export function AppShell() {
               >
                 <Server size={18} />
                 <span>节点</span>
+              </NavLink>
+              <NavLink
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/configuration`}
+                aria-label="当前网络配置"
+              >
+                <FileCog size={18} />
+                <span>配置</span>
               </NavLink>
             </>
           ) : null}

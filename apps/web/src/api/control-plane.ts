@@ -4,6 +4,7 @@ import {
   NetworkListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
+  RedactedNetworkConfigurationSchema,
   NetworkSummarySchema,
   NetworkTopologyResponseSchema,
   type HealthResponse,
@@ -11,6 +12,7 @@ import {
   type NetworkListResponse,
   type NetworkNode,
   type NetworkNodeListResponse,
+  type RedactedNetworkConfiguration,
   type NetworkSummary,
   type NetworkTopologyResponse,
 } from '@plus-fabric/shared';
@@ -94,6 +96,16 @@ export async function getNetworkNode(networkId: string, nodeId: string): Promise
       `/api/v1/networks/${encodeURIComponent(networkId)}/nodes/${encodeURIComponent(nodeId)}`,
     ),
   );
+}
+
+export async function getNetworkConfiguration(
+  networkId: string,
+): Promise<RedactedNetworkConfiguration> {
+  const configuration = RedactedNetworkConfigurationSchema.parse(
+    await requestJson(`/api/v1/networks/${encodeURIComponent(networkId)}/config`),
+  );
+  assertNetworkScope(networkId, configuration.networkId);
+  return configuration;
 }
 
 function assertNetworkScope(requestedNetworkId: string, responseNetworkId: string): void {
