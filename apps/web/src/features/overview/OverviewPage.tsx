@@ -8,7 +8,7 @@ import { Panel } from '../../components/Panel';
 import {
   formatDateTimeZh,
   getJobStatusLabel,
-  getNetworkActionLabel,
+  getJobActionLabel,
 } from '../../i18n/zh-CN';
 
 export function OverviewPage() {
@@ -212,9 +212,9 @@ export function OverviewPage() {
                 to={`/networks/${encodeURIComponent(job.networkId)}/operations`}
                 key={job.id}
               >
-                <span className={`job-status-dot job-status-dot--${job.status}`} />
+                <span className={`job-status-dot job-status-dot--${job.status}`} aria-hidden="true" />
                 <span>
-                  <strong>{getNetworkActionLabel(job.action)}</strong>
+                  <strong>{getJobActionLabel(job.kind, job.action)}</strong>
                   <small>{job.networkId} · {formatDateTimeZh(job.createdAt)}</small>
                 </span>
                 <em className={`job-status job-status--${job.status}`}>

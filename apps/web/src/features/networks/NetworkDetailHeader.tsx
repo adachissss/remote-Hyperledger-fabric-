@@ -53,6 +53,7 @@ export function NetworkDetailHeader({
         <NavLink to={`/networks/${encodedNetworkId}/configuration`}>配置</NavLink>
         <NavLink to={`/networks/${encodedNetworkId}/operations`}>运维</NavLink>
         <NavLink to={`/networks/${encodedNetworkId}/ledger`}>账本</NavLink>
+        <NavLink to={`/networks/${encodedNetworkId}/chaincodes`}>链码</NavLink>
       </nav>
     </>
   );

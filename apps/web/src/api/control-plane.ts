@@ -1,4 +1,8 @@
 import {
+  ChaincodeInventoryResponseSchema,
+  ContractExecutionRequestSchema,
+  ContractExecutionResultSchema,
+  CreateChaincodeDeploymentRequestSchema,
   HealthResponseSchema,
   ImportNetworkRequestSchema,
   JobEventListResponseSchema,
@@ -15,6 +19,11 @@ import {
   NetworkSummarySchema,
   NetworkTopologyResponseSchema,
   type HealthResponse,
+  type ChaincodeInventoryResponse,
+  type ContractExecutionMode,
+  type ContractExecutionRequest,
+  type ContractExecutionResult,
+  type CreateChaincodeDeploymentRequest,
   type ImportNetworkRequest,
   type Job,
   type JobEvent,
@@ -174,6 +183,45 @@ export async function getLedgerBlock(
     );
   }
   return block;
+}
+
+export async function getChaincodeInventory(
+  networkId: string,
+): Promise<ChaincodeInventoryResponse> {
+  const inventory = ChaincodeInventoryResponseSchema.parse(
+    await requestJson(`/api/v1/networks/${encodeURIComponent(networkId)}/chaincodes`),
+  );
+  assertNetworkScope(networkId, inventory.networkId);
+  return inventory;
+}
+
+export async function createChaincodeDeployment(request: {
+  networkId: string;
+  deployment: CreateChaincodeDeploymentRequest;
+}): Promise<Job> {
+  const deployment = CreateChaincodeDeploymentRequestSchema.parse(request.deployment);
+  return JobSchema.parse(
+    await requestJson(
+      `/api/v1/networks/${encodeURIComponent(request.networkId)}/chaincodes/deployments`,
+      { method: 'POST', body: JSON.stringify(deployment) },
+    ),
+  );
+}
+
+export async function executeContract(request: {
+  networkId: string;
+  mode: ContractExecutionMode;
+  execution: ContractExecutionRequest;
+}): Promise<ContractExecutionResult> {
+  const execution = ContractExecutionRequestSchema.parse(request.execution);
+  const result = ContractExecutionResultSchema.parse(
+    await requestJson(
+      `/api/v1/networks/${encodeURIComponent(request.networkId)}/contracts/${request.mode}`,
+      { method: 'POST', body: JSON.stringify(execution) },
+    ),
+  );
+  assertNetworkScope(request.networkId, result.networkId);
+  return result;
 }
 
 export async function getJobs(networkId?: string): Promise<JobListResponse> {

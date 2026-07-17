@@ -1,43 +1,41 @@
 import { spawn } from 'node:child_process';
 
-import type { JobLogStream, NetworkLifecycleAction } from '@plus-fabric/shared';
+import type { JobLogStream } from '@plus-fabric/shared';
 
 export type ProcessLogLine = {
   stream: Extract<JobLogStream, 'stdout' | 'stderr'>;
   message: string;
 };
 
-export type LifecycleProcessRequest = {
+export type ProcessRequest = {
   executable: string;
-  action: NetworkLifecycleAction;
+  args: string[];
   cwd: string;
-  configPath: string;
-  composeProject: string;
+  environment: Record<string, string>;
   timeoutMs: number;
   signal: AbortSignal;
   onLine(line: ProcessLogLine): Promise<void> | void;
 };
 
-export type LifecycleProcessResult = {
+export type ProcessResult = {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   cancelled: boolean;
   timedOut: boolean;
 };
 
-export interface LifecycleProcessRunner {
-  run(request: LifecycleProcessRequest): Promise<LifecycleProcessResult>;
+export interface ProcessRunner {
+  run(request: ProcessRequest): Promise<ProcessResult>;
 }
 
-export class NodeLifecycleProcessRunner implements LifecycleProcessRunner {
-  run(request: LifecycleProcessRequest): Promise<LifecycleProcessResult> {
+export class NodeProcessRunner implements ProcessRunner {
+  run(request: ProcessRequest): Promise<ProcessResult> {
     return new Promise((resolve, reject) => {
-      const child = spawn(request.executable, [request.action], {
+      const child = spawn(request.executable, request.args, {
         cwd: request.cwd,
         env: {
           ...process.env,
-          CONFIG_FILE: request.configPath,
-          COMPOSE_PROJECT_NAME: request.composeProject,
+          ...request.environment,
         },
         shell: false,
         detached: process.platform !== 'win32',

@@ -18,7 +18,6 @@ import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { getNetworks, getSystemHealth } from '../api/control-plane';
 
 const futureNavigation = [
-  { label: '链码', icon: TerminalSquare },
   { label: '测试', icon: Gauge },
 ];
 
@@ -134,6 +133,13 @@ export function AppShell() {
                 <Blocks size={17} />
                 <span>账本</span>
               </NavLink>
+              <NavLink
+                className="navigation-link"
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/chaincodes`}
+              >
+                <TerminalSquare size={17} />
+                <span>链码</span>
+              </NavLink>
             </>
           ) : (
             <>
@@ -156,6 +162,10 @@ export function AppShell() {
               <div className="navigation-link navigation-link--disabled">
                 <Blocks size={17} />
                 <span>账本</span>
+              </div>
+              <div className="navigation-link navigation-link--disabled">
+                <TerminalSquare size={17} />
+                <span>链码</span>
               </div>
             </>
           )}
@@ -234,6 +244,13 @@ export function AppShell() {
               >
                 <Blocks size={18} />
                 <span>账本</span>
+              </NavLink>
+              <NavLink
+                to={`/networks/${encodeURIComponent(selectedNetworkId)}/chaincodes`}
+                aria-label="当前网络链码"
+              >
+                <TerminalSquare size={18} />
+                <span>链码</span>
               </NavLink>
             </>
           ) : null}

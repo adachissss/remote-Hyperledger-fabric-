@@ -1,5 +1,7 @@
 import type {
   JobStatus,
+  JobAction,
+  JobKind,
   NetworkManagementMode,
   NetworkLifecycleAction,
   NetworkNodeRuntimeState,
@@ -41,6 +43,17 @@ const apiErrorMessages: Record<string, string> = {
   ledger_unavailable: '暂时无法从 Fabric Peer 读取账本，请确认网络和节点正在运行。',
   channel_scope_mismatch: '控制平面返回了其他通道的数据，已拒绝显示。',
   block_scope_mismatch: '控制平面返回了其他区块的数据，已拒绝显示。',
+  invalid_chaincode_deployment: '链码部署参数不正确，请检查通道、版本、序列和路径。',
+  invalid_contract_request: '合约执行参数不正确，请检查函数和参数格式。',
+  chaincode_context_unavailable: '缺少链码操作所需的 Fabric CLI、管理员身份或 TLS 文件。',
+  chaincode_unavailable: '暂时无法查询或执行链码，请确认网络和 Peer 正在运行。',
+  chaincode_organization_not_found: '找不到用于执行合约的组织。',
+  chaincode_target_organization_not_found: '找不到指定的背书目标组织。',
+  chaincode_target_not_joined: '指定背书组织尚未加入目标通道。',
+  chaincode_targets_unavailable: '目标通道没有可用于背书的已配置 Peer。',
+  chaincode_deployment_script_unavailable: '网络工作区没有可执行的 upgrade_chaincode.sh。',
+  chaincode_source_not_found: '链码源码目录不存在或不在当前网络工作区内。',
+  collections_config_not_found: 'Collections 配置文件不存在或不在当前网络工作区内。',
 };
 
 const runtimeStateLabels: Record<NetworkNodeRuntimeState, string> = {
@@ -119,6 +132,13 @@ export function getJobStatusLabel(status: JobStatus): string {
 
 export function getNetworkActionLabel(action: NetworkLifecycleAction): string {
   return networkActionLabels[action];
+}
+
+export function getJobActionLabel(kind: JobKind, action: JobAction): string {
+  if (kind === 'chaincode-deployment') return '部署链码';
+  return action in networkActionLabels
+    ? networkActionLabels[action as NetworkLifecycleAction]
+    : action;
 }
 
 export function getOrganizationTypeLabel(type: 'peer' | 'orderer'): string {

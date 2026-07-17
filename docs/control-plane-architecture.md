@@ -82,8 +82,8 @@ flowchart LR
 | 网络清理 | `network.sh down` | 管理员权限、输入网络名二次确认 |
 | 配置与拓扑 | `config/orgs.yaml`、`script/export-network-info.sh` | 结构化只读 API |
 | 通道加入 | `script/osnadmin-examples.sh`、`joinChannel.sh` | 网络部署作业步骤 |
-| 链码部署 | `upgrade_chaincode.sh` | 分步骤生命周期作业 |
-| 链码调用 | `smart_contract_execute.sh` | 参数白名单 + query/invoke API |
+| 链码部署 | `upgrade_chaincode.sh` | 单步骤异步作业、SSE 日志与网络互斥 |
+| 链码调用 | Peer CLI | 结构化 evaluate/submit API |
 | 区块信息 | Peer CLI + QSCC + `fabric-protos` | Ledger Service 结构化解析 |
 | Caliper | 尚未接入 | 后续 Test Plan/Run/Report 模块 |
 
@@ -167,15 +167,15 @@ queued -> running -> succeeded
 
 每个 Job 保存步骤、开始/结束时间、退出码、脱敏后的 stdout/stderr 和操作者。日志通过 SSE 推送。
 
-锁粒度：
+当前本地实验版本的锁粒度：
 
-- 网络生命周期：`network:{networkId}` 独占；
-- 链码部署：`network:{networkId}:channel:{channel}:chaincode:{name}` 独占；
-- query 可并发，invoke 受速率限制但不使用全局锁。
+- 网络生命周期和链码部署共用 `network:{networkId}` 独占锁，避免脚本同时修改同一网络；
+- evaluate/submit 不进入长任务队列；
+- 后续需要并行部署时，再将链码锁细化到 channel/name 并增加 submit 速率限制。
 
 所有命令使用 `spawn(executable, args, { shell: false })`；禁止把用户输入拼接进 Shell 字符串。
 
-当前本地实验版本已经实现网络生命周期作业：Job、JobStep 和 JobEvent 持久化到 SQLite；同一 `networkId` 的活动作业由数据库唯一索引互斥；控制平面异常重启时，遗留的等待中或执行中作业会自动标记为失败并释放锁。执行器以注册的 `workspaceRoot` 为工作目录，传入可信的 `CONFIG_FILE` 和 `COMPOSE_PROJECT_NAME`，随后直接执行原 `network.sh` 的 `up`、`stop`、`restart` 或 `down` 参数。stdout/stderr 会去除 ANSI 控制符并进行基础凭据脱敏，既可通过 JSON 查询，也可使用 `Accept: text/event-stream` 实时订阅。
+当前本地实验版本已经实现网络生命周期和链码部署作业：Job、JobStep 和 JobEvent 持久化到 SQLite；同一 `networkId` 的活动变更作业由数据库唯一索引互斥；控制平面异常重启时，遗留的等待中或执行中作业会自动标记为失败并释放锁。执行器以注册的 `workspaceRoot` 为工作目录，传入可信的 `CONFIG_FILE` 和 `COMPOSE_PROJECT_NAME`，随后直接执行原 `network.sh` 或 `upgrade_chaincode.sh`。stdout/stderr 会去除 ANSI 控制符并进行基础凭据脱敏，既可通过 JSON 查询，也可使用 `Accept: text/event-stream` 实时订阅。
 
 Operations 页面提供四个生命周期入口、作业取消、历史步骤和日志查看。`down` 需要输入网络 ID 确认。当前操作者记录为本地 `local-user`，认证与细粒度 RBAC 仍属于后续加固阶段。
 
@@ -212,17 +212,21 @@ Operations 页面提供四个生命周期入口、作业取消、历史步骤和
 
 ### 6.5 Chaincode Service
 
-核心平台不绑定任何具体链码。初期只允许从服务端注册的 Chaincode Catalog 部署受控源码目录，避免通过上传任意链码获得宿主机/Docker 执行能力。Catalog 由管理员显式维护，不预置演示条目。
+核心平台不绑定任何具体链码，也不预置演示条目。当前本地实验模式允许填写已注册网络工作区内的相对源码路径，并在服务端解析真实路径、拒绝越出工作区的源码或 collections 配置。显式维护的 Chaincode Catalog 仍是生产加固项；当前不支持浏览器上传或执行工作区外的源码。
 
-部署流程：预检 → package → install → approve → readiness → commit → verify。每一步都成为 Job Step，失败后可以从安全步骤重试。
+部署继续调用原 `upgrade_chaincode.sh`，脚本内部执行 package → install → approve → readiness → commit。当前数据库将整个脚本记录为一个 JobStep，并通过 SSE 展示内部阶段日志；拆分为可独立重试的结构化 JobStep 和提交后 verify 仍属于后续工作。
+
+Chaincode Inventory 使用各组织 Peer 的管理员上下文查询 `queryinstalled`，并按动态发现的通道查询 `querycommitted`。执行服务直接使用 Peer CLI：evaluate 只连接调用组织的 Peer；submit 使用动态 Orderer TLS 配置，并且只把已加入目标通道的组织加入背书目标。
 
 执行台支持：
 
 - channel、chaincode、organization、query/invoke；
 - function 和 JSON 参数；
 - endorsement target organizations；
-- transient JSON，日志与审计中始终脱敏；
-- 执行结果、交易 ID、验证状态和耗时。
+- transient JSON，只在内存中编码，不进入日志和响应；
+- 执行结果、交易 ID、响应状态和耗时。
+
+同步执行结果当前不持久化，transient 对象只在后端内存中编码为 Fabric CLI 所需的 base64 map，不进入作业日志或 API 响应。链码事件与最终区块验证状态需要在 submit 后关联 Ledger Service，尚未实现。
 
 ## 7. API 草案
 
@@ -265,15 +269,14 @@ Selected Network
 ├── Nodes
 ├── Configuration
 ├── Operations
-└── Ledger
-    ├── Dynamically discovered Channels
-    ├── Paginated Blocks
-    └── Expanded Transactions and RW Sets
-Chaincodes
-├── Catalog
-├── Installed / Committed
-├── Deployments
-└── Execute
+├── Ledger
+│   ├── Dynamically discovered Channels
+│   ├── Paginated Blocks
+│   └── Expanded Transactions and RW Sets
+└── Chaincodes
+    ├── Installed / Committed Inventory
+    ├── Workspace Deployment
+    └── Evaluate / Submit Console
 Testing
 └── Caliper (later)
 ```

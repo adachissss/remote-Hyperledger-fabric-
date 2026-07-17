@@ -35,6 +35,22 @@ test('job registry persists lifecycle state and locks one active job per network
       }),
       ActiveNetworkJobError,
     );
+    await assert.rejects(
+      registry.createChaincodeDeploymentJob({
+        id: randomUUID(),
+        stepId: randomUUID(),
+        networkId: first.networkId,
+        actor: 'local-user',
+        createdAt,
+        context: {
+          channelName: 'channel-a',
+          name: 'assetcc',
+          version: '1.0',
+          sequence: '1',
+        },
+      }),
+      ActiveNetworkJobError,
+    );
 
     const startedAt = new Date(Date.now() + 1).toISOString();
     await registry.markRunning(first.id, startedAt);

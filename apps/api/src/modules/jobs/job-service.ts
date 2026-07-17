@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access } from 'node:fs/promises';
+import { access, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -9,17 +9,26 @@ import type {
   JobStatus,
   JobSummary,
   NetworkLifecycleAction,
+  CreateChaincodeDeploymentRequest,
 } from '@plus-fabric/shared';
 
-import type { RegisteredNetwork } from '../networks/network-driver.js';
 import type { NetworkRegistry } from '../networks/network-registry.js';
 import {
   ActiveNetworkJobError,
   type JobRegistry,
 } from './job-registry.js';
-import type { LifecycleProcessRunner } from './process-runner.js';
+import type { ProcessRunner } from './process-runner.js';
 
 type JobEventListener = (event: JobEvent) => void;
+
+type JobProcessSpec = {
+  executable: string;
+  args: string[];
+  cwd: string;
+  environment: Record<string, string>;
+  timeoutMs: number;
+  failureMessage: string;
+};
 
 export class JobServiceError extends Error {
   constructor(
@@ -40,7 +49,7 @@ export class JobService {
   constructor(
     private readonly jobRegistry: JobRegistry,
     private readonly networkRegistry: NetworkRegistry,
-    private readonly processRunner: LifecycleProcessRunner,
+    private readonly processRunner: ProcessRunner,
   ) {}
 
   async initialize(): Promise<void> {
@@ -117,7 +126,134 @@ export class JobService {
     this.#emit(created.events);
     const controller = new AbortController();
     this.#controllers.set(created.job.id, controller);
-    const task = this.#execute(created.job, network, executable, controller).finally(() => {
+    const task = this.#execute(
+      created.job,
+      {
+        executable,
+        args: [action],
+        cwd: network.workspaceRoot,
+        environment: {
+          CONFIG_FILE: network.configPath,
+          COMPOSE_PROJECT_NAME: network.composeProject,
+        },
+        timeoutMs: timeoutFor(action),
+        failureMessage: '原网络脚本',
+      },
+      controller,
+    ).finally(() => {
+      this.#controllers.delete(created.job.id);
+      this.#tasks.delete(created.job.id);
+    });
+    this.#tasks.set(created.job.id, task);
+    return created.job;
+  }
+
+  async createChaincodeDeployment(
+    networkId: string,
+    request: CreateChaincodeDeploymentRequest,
+  ): Promise<Job> {
+    const network = await this.networkRegistry.get(networkId);
+    if (!network) {
+      throw new JobServiceError(
+        'network_not_found',
+        `Network "${networkId}" is not registered.`,
+        404,
+      );
+    }
+
+    const executable = path.join(network.workspaceRoot, 'upgrade_chaincode.sh');
+    try {
+      await access(executable, constants.X_OK);
+    } catch {
+      throw new JobServiceError(
+        'chaincode_deployment_script_unavailable',
+        'The registered workspace does not contain an executable upgrade_chaincode.sh.',
+        409,
+      );
+    }
+
+    const sourcePath = await resolveWorkspaceEntry(
+      network.workspaceRoot,
+      request.sourcePath,
+      'directory',
+      'chaincode_source_not_found',
+    );
+    const collectionsConfigPath = request.collectionsConfigPath
+      ? await resolveWorkspaceEntry(
+          network.workspaceRoot,
+          request.collectionsConfigPath,
+          'file',
+          'collections_config_not_found',
+        )
+      : null;
+    const args = [
+      '--name',
+      request.name,
+      '--version',
+      request.version,
+      '--sequence',
+      String(request.sequence),
+      '--channel',
+      request.channelName,
+      '--path',
+      sourcePath,
+      '--lang',
+      request.language,
+    ];
+    if (collectionsConfigPath) {
+      args.push('--collections-config', collectionsConfigPath);
+    }
+    if (request.signaturePolicy) {
+      args.push('--signature-policy', request.signaturePolicy);
+    }
+
+    const createdAt = new Date().toISOString();
+    let created;
+    try {
+      created = await this.jobRegistry.createChaincodeDeploymentJob({
+        id: randomUUID(),
+        stepId: randomUUID(),
+        networkId,
+        actor: 'local-user',
+        createdAt,
+        context: {
+          channelName: request.channelName,
+          name: request.name,
+          version: request.version,
+          sequence: String(request.sequence),
+          language: request.language,
+          sourcePath: request.sourcePath,
+          ...(request.collectionsConfigPath
+            ? { collectionsConfigPath: request.collectionsConfigPath }
+            : {}),
+        },
+      });
+    } catch (error) {
+      if (error instanceof ActiveNetworkJobError) {
+        throw new JobServiceError('network_job_active', error.message, 409);
+      }
+      throw error;
+    }
+
+    this.#emit(created.events);
+    const controller = new AbortController();
+    this.#controllers.set(created.job.id, controller);
+    const task = this.#execute(
+      created.job,
+      {
+        executable,
+        args,
+        cwd: network.workspaceRoot,
+        environment: {
+          PROJECT_ROOT: network.workspaceRoot,
+          CONFIG_FILE: network.configPath,
+          COMPOSE_PROJECT_NAME: network.composeProject,
+        },
+        timeoutMs: 60 * 60_000,
+        failureMessage: '链码生命周期脚本',
+      },
+      controller,
+    ).finally(() => {
       this.#controllers.delete(created.job.id);
       this.#tasks.delete(created.job.id);
     });
@@ -157,8 +293,7 @@ export class JobService {
 
   async #execute(
     job: Job,
-    network: RegisteredNetwork,
-    executable: string,
+    spec: JobProcessSpec,
     controller: AbortController,
   ): Promise<void> {
     const step = job.steps[0];
@@ -167,12 +302,11 @@ export class JobService {
     try {
       this.#emit(await this.jobRegistry.markRunning(job.id, new Date().toISOString()));
       const result = await this.processRunner.run({
-        executable,
-        action: job.action,
-        cwd: network.workspaceRoot,
-        configPath: network.configPath,
-        composeProject: network.composeProject,
-        timeoutMs: timeoutFor(job.action),
+        executable: spec.executable,
+        args: spec.args,
+        cwd: spec.cwd,
+        environment: spec.environment,
+        timeoutMs: spec.timeoutMs,
         signal: controller.signal,
         onLine: async ({ stream, message }) => {
           const event = await this.jobRegistry.appendLog(
@@ -197,7 +331,7 @@ export class JobService {
           job.id,
           'failed',
           result.exitCode,
-          `原网络脚本退出码为 ${result.exitCode ?? '未知'}。`,
+          `${spec.failureMessage}退出码为 ${result.exitCode ?? '未知'}。`,
         );
       }
     } catch (error) {
@@ -205,7 +339,7 @@ export class JobService {
         job.id,
         controller.signal.aborted ? 'cancelled' : 'failed',
         null,
-        error instanceof Error ? error.message : '执行网络脚本时发生未知错误。',
+        error instanceof Error ? error.message : '执行作业脚本时发生未知错误。',
       ).catch(() => undefined);
     }
   }
@@ -231,6 +365,30 @@ export class JobService {
     for (const event of events) {
       for (const listener of this.#listeners.get(event.jobId) ?? []) listener(event);
     }
+  }
+}
+
+async function resolveWorkspaceEntry(
+  workspaceRoot: string,
+  requestedPath: string,
+  expectedType: 'file' | 'directory',
+  errorCode: string,
+): Promise<string> {
+  try {
+    const resolved = await realpath(path.resolve(workspaceRoot, requestedPath));
+    const relative = path.relative(workspaceRoot, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('outside workspace');
+    const entry = await stat(resolved);
+    if (expectedType === 'file' ? !entry.isFile() : !entry.isDirectory()) {
+      throw new Error('unexpected entry type');
+    }
+    return resolved;
+  } catch {
+    throw new JobServiceError(
+      errorCode,
+      `The requested ${expectedType} does not exist inside the registered workspace.`,
+      400,
+    );
   }
 }
 

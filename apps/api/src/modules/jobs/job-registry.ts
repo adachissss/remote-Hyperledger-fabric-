@@ -6,7 +6,10 @@ import {
   JobSchema,
   JobSummarySchema,
   type Job,
+  type JobAction,
+  type JobContext,
   type JobEvent,
+  type JobKind,
   type JobLogStream,
   type JobStatus,
   type JobSummary,
@@ -16,9 +19,10 @@ import Database from 'better-sqlite3';
 
 type JobRow = {
   id: string;
-  kind: 'network-lifecycle';
+  kind: JobKind;
   network_id: string;
-  action: NetworkLifecycleAction;
+  action: JobAction;
+  context_json: string;
   status: JobStatus;
   actor: string;
   exit_code: number | null;
@@ -58,9 +62,18 @@ export type CreateNetworkLifecycleJob = {
   createdAt: string;
 };
 
+export type CreateChaincodeDeploymentJob = {
+  id: string;
+  stepId: string;
+  networkId: string;
+  actor: string;
+  createdAt: string;
+  context: JobContext;
+};
+
 export class ActiveNetworkJobError extends Error {
   constructor(readonly networkId: string) {
-    super(`Network "${networkId}" already has an active lifecycle job.`);
+    super(`Network "${networkId}" already has an active mutation job.`);
     this.name = 'ActiveNetworkJobError';
   }
 }
@@ -76,6 +89,10 @@ export interface JobRegistry {
   list(networkId?: string): Promise<JobSummary[]>;
   get(jobId: string): Promise<Job | null>;
   createNetworkLifecycleJob(input: CreateNetworkLifecycleJob): Promise<{
+    job: Job;
+    events: JobEvent[];
+  }>;
+  createChaincodeDeploymentJob(input: CreateChaincodeDeploymentJob): Promise<{
     job: Job;
     events: JobEvent[];
   }>;
@@ -117,6 +134,7 @@ class SqliteJobRegistry implements JobRegistry {
         kind TEXT NOT NULL,
         network_id TEXT NOT NULL,
         action TEXT NOT NULL,
+        context_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL,
         actor TEXT NOT NULL,
         exit_code INTEGER,
@@ -156,6 +174,15 @@ class SqliteJobRegistry implements JobRegistry {
         ON jobs(network_id)
         WHERE kind = 'network-lifecycle' AND status IN ('queued', 'running');
     `);
+    const jobColumns = this.#database.pragma('table_info(jobs)') as Array<{ name: string }>;
+    if (!jobColumns.some((column) => column.name === 'context_json')) {
+      this.#database.exec("ALTER TABLE jobs ADD COLUMN context_json TEXT NOT NULL DEFAULT '{}'");
+    }
+    this.#database.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_active_network_mutation
+        ON jobs(network_id)
+        WHERE status IN ('queued', 'running');
+    `);
   }
 
   async list(networkId?: string): Promise<JobSummary[]> {
@@ -183,22 +210,66 @@ class SqliteJobRegistry implements JobRegistry {
     job: Job;
     events: JobEvent[];
   }> {
+    return this.#createJob({
+      id: input.id,
+      stepId: input.stepId,
+      networkId: input.networkId,
+      kind: 'network-lifecycle',
+      action: input.action,
+      actor: input.actor,
+      createdAt: input.createdAt,
+      context: {},
+      stepName: `network.sh ${input.action}`,
+    });
+  }
+
+  async createChaincodeDeploymentJob(input: CreateChaincodeDeploymentJob): Promise<{
+    job: Job;
+    events: JobEvent[];
+  }> {
+    return this.#createJob({
+      ...input,
+      kind: 'chaincode-deployment',
+      action: 'deploy',
+      stepName: `upgrade_chaincode.sh ${input.context.name ?? ''}`.trim(),
+    });
+  }
+
+  async #createJob(input: {
+    id: string;
+    stepId: string;
+    networkId: string;
+    kind: JobKind;
+    action: JobAction;
+    actor: string;
+    createdAt: string;
+    context: JobContext;
+    stepName: string;
+  }): Promise<{ job: Job; events: JobEvent[] }> {
     const create = this.#database.transaction(() => {
       this.#database
         .prepare(`
           INSERT INTO jobs (
-            id, kind, network_id, action, status, actor, exit_code, error_message,
+            id, kind, network_id, action, context_json, status, actor, exit_code, error_message,
             created_at, started_at, finished_at
-          ) VALUES (?, 'network-lifecycle', ?, ?, 'queued', ?, NULL, NULL, ?, NULL, NULL)
+          ) VALUES (?, ?, ?, ?, ?, 'queued', ?, NULL, NULL, ?, NULL, NULL)
         `)
-        .run(input.id, input.networkId, input.action, input.actor, input.createdAt);
+        .run(
+          input.id,
+          input.kind,
+          input.networkId,
+          input.action,
+          JSON.stringify(input.context),
+          input.actor,
+          input.createdAt,
+        );
       this.#database
         .prepare(`
           INSERT INTO job_steps (
             id, job_id, sequence, name, status, started_at, finished_at, exit_code
           ) VALUES (?, ?, 1, ?, 'pending', NULL, NULL, NULL)
         `)
-        .run(input.stepId, input.id, `network.sh ${input.action}`);
+        .run(input.stepId, input.id, input.stepName);
       return this.#insertEvent(
         input.id,
         null,
@@ -243,7 +314,7 @@ class SqliteJobRegistry implements JobRegistry {
 
       return [
         this.#insertEvent(jobId, null, 'status', 'system', '作业开始执行。', startedAt),
-        this.#insertEvent(jobId, step.id, 'step', 'system', '开始执行原网络脚本。', startedAt),
+        this.#insertEvent(jobId, step.id, 'step', 'system', '开始执行作业脚本。', startedAt),
       ];
     })();
   }
@@ -402,11 +473,24 @@ function toJobSummary(row: JobRow): JobSummary {
     kind: row.kind,
     networkId: row.network_id,
     action: row.action,
+    context: parseJobContext(row.context_json),
     status: row.status,
     createdAt: row.created_at,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
   });
+}
+
+function parseJobContext(value: string): JobContext {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  } catch {
+    return {};
+  }
 }
 
 function toJob(row: JobRow, steps: JobStepRow[]): Job {

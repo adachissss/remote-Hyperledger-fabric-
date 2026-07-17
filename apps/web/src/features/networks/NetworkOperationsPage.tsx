@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { JobStatus, NetworkLifecycleAction } from '@plus-fabric/shared';
+import type { JobStatus, JobSummary, NetworkLifecycleAction } from '@plus-fabric/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CircleAlert,
@@ -29,6 +29,7 @@ import {
   formatDateTimeZh,
   getApiErrorMessage,
   getJobStatusLabel,
+  getJobActionLabel,
   getNetworkActionLabel,
 } from '../../i18n/zh-CN';
 import { NetworkDetailHeader } from './NetworkDetailHeader';
@@ -119,8 +120,9 @@ export function NetworkOperationsPage() {
     },
   });
 
-  const jobs = jobsQuery.data?.items ?? [];
-  const activeJob = jobs.find((job) => job.status === 'queued' || job.status === 'running');
+  const allJobs = jobsQuery.data?.items ?? [];
+  const jobs = allJobs.filter(isNetworkLifecycleJob);
+  const activeJob = allJobs.find((job) => job.status === 'queued' || job.status === 'running');
 
   useEffect(() => {
     if (selectedJobId && jobs.some((job) => job.id === selectedJobId)) return;
@@ -248,7 +250,7 @@ export function NetworkOperationsPage() {
         <div className="active-job-strip">
           <span className="active-job-strip__pulse" aria-hidden="true" />
           <div>
-            <strong>{getNetworkActionLabel(activeJob.action)}正在{activeJob.status === 'queued' ? '等待' : '执行'}</strong>
+            <strong>{getJobActionLabel(activeJob.kind, activeJob.action)}正在{activeJob.status === 'queued' ? '等待' : '执行'}</strong>
             <small>{activeJob.id}</small>
           </div>
           <button
@@ -303,7 +305,7 @@ export function NetworkOperationsPage() {
                   className={selectedJobId === job.id ? 'is-selected' : undefined}
                   onClick={() => setSelectedJobId(job.id)}
                 >
-                  <span className={`job-status-dot job-status-dot--${job.status}`} />
+                  <span className={`job-status-dot job-status-dot--${job.status}`} aria-hidden="true" />
                   <span>
                     <strong>{getNetworkActionLabel(job.action)}</strong>
                     <small>{formatDateTimeZh(job.createdAt)}</small>
@@ -317,7 +319,12 @@ export function NetworkOperationsPage() {
 
             <JobConsole
               status={jobQuery.data?.status ?? null}
-              action={jobQuery.data?.action ?? null}
+              action={
+                jobQuery.data?.kind === 'network-lifecycle' &&
+                isNetworkLifecycleAction(jobQuery.data.action)
+                  ? jobQuery.data.action
+                  : null
+              }
               createdAt={jobQuery.data?.createdAt ?? null}
               startedAt={jobQuery.data?.startedAt ?? null}
               finishedAt={jobQuery.data?.finishedAt ?? null}
@@ -382,6 +389,16 @@ export function NetworkOperationsPage() {
       ) : null}
     </div>
   );
+}
+
+function isNetworkLifecycleAction(value: string): value is NetworkLifecycleAction {
+  return value === 'up' || value === 'stop' || value === 'restart' || value === 'down';
+}
+
+function isNetworkLifecycleJob(
+  job: JobSummary,
+): job is JobSummary & { kind: 'network-lifecycle'; action: NetworkLifecycleAction } {
+  return job.kind === 'network-lifecycle' && isNetworkLifecycleAction(job.action);
 }
 
 function JobConsole({

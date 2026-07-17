@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { NodeLifecycleProcessRunner } from './process-runner.js';
+import { NodeProcessRunner } from './process-runner.js';
 
 test('process runner executes network scripts without a shell command string and sanitizes logs', async () => {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'plus-fabric-runner-'));
@@ -23,12 +23,14 @@ printf '%s\\n' '-----BEGIN PRIVATE KEY-----' 'private-material' '-----END PRIVAT
   const lines: string[] = [];
 
   try {
-    const result = await new NodeLifecycleProcessRunner().run({
+    const result = await new NodeProcessRunner().run({
       executable,
-      action: 'restart',
+      args: ['restart'],
       cwd: temporaryRoot,
-      configPath: path.join(temporaryRoot, 'config.yaml'),
-      composeProject: 'network-a',
+      environment: {
+        CONFIG_FILE: path.join(temporaryRoot, 'config.yaml'),
+        COMPOSE_PROJECT_NAME: 'network-a',
+      },
       timeoutMs: 5_000,
       signal: new AbortController().signal,
       onLine: ({ stream, message }) => {
@@ -63,12 +65,14 @@ sleep 30
 
   try {
     await assert.rejects(
-      new NodeLifecycleProcessRunner().run({
+      new NodeProcessRunner().run({
         executable,
-        action: 'restart',
+        args: ['restart'],
         cwd: temporaryRoot,
-        configPath: path.join(temporaryRoot, 'config.yaml'),
-        composeProject: 'network-a',
+        environment: {
+          CONFIG_FILE: path.join(temporaryRoot, 'config.yaml'),
+          COMPOSE_PROJECT_NAME: 'network-a',
+        },
         timeoutMs: 5_000,
         signal: new AbortController().signal,
         onLine: () => {

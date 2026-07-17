@@ -12,6 +12,7 @@ print_usage() {
 
 选项:
   -p, --path <目录>                 指定链码目录。默认优先 ./chaincode/<链码名>，其次 ./chaincode/<链码名>-v<版本>
+  --lang <node|golang|java>         链码语言；默认 node
   --collections-config <文件>       指定 private data collection 配置文件；不传则不使用
   --signature-policy <策略>         指定背书策略；默认按 config/orgs.yaml 中组织生成 OutOf(N,...)
   -h, --help                        显示帮助
@@ -25,6 +26,7 @@ SEQUENCE=""
 CHAINCODE_DIR=""
 COLLECTIONS_CONFIG=""
 SIGNATURE_POLICY=""
+CHAINCODE_LANG="${CHAINCODE_LANG:-node}"
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
@@ -43,6 +45,8 @@ while [[ $# -gt 0 ]]; do
       COLLECTIONS_CONFIG="$2"; shift 2;;
     --signature-policy)
       SIGNATURE_POLICY="$2"; shift 2;;
+    --lang)
+      CHAINCODE_LANG="$2"; shift 2;;
     -h|--help)
       print_usage; exit 0;;
     *)
@@ -72,6 +76,10 @@ if [[ -z "$CHANNEL_NAME" ]]; then
   echo "错误：未提供通道名。请使用 -c/--channel 或设置 CHANNEL_NAME。"
   print_usage; exit 1
 fi
+if [[ "$CHAINCODE_LANG" != "node" && "$CHAINCODE_LANG" != "golang" && "$CHAINCODE_LANG" != "java" ]]; then
+  echo "错误：链码语言必须是 node、golang 或 java。"
+  exit 1
+fi
 
 if [[ -z "${PROJECT_ROOT:-}" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -92,9 +100,11 @@ export PATH="${PROJECT_ROOT}/bin:$PATH"
 export CORE_PEER_TLS_ENABLED=true
 
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
-ORDERER_ADDRESS="orderer1.example.com:7050"
-ORDERER_HOST_OVERRIDE="orderer1.example.com"
-ORDERER_CA="${PROJECT_ROOT}/organizations/ordererOrganizations/example.com/orderers/orderer1.example.com/tls/ca.crt"
+ORDERER_HOST_OVERRIDE=$(get_config_value_raw '.ordererOrg.nodes[0].host')
+ORDERER_PORT=$(get_config_value_raw '.ordererOrg.nodes[0].port')
+ORDERER_DOMAIN=$(get_config_value_raw '.ordererOrg.domain // .network.domain')
+ORDERER_ADDRESS="${ORDERER_HOST_OVERRIDE}:${ORDERER_PORT}"
+ORDERER_CA="${PROJECT_ROOT}/organizations/ordererOrganizations/${ORDERER_DOMAIN}/orderers/${ORDERER_HOST_OVERRIDE}/tls/ca.crt"
 
 if [[ -z "$CHAINCODE_DIR" ]]; then
   if [[ -d "./chaincode/${CHAINCODE_NAME}" ]]; then
@@ -140,6 +150,7 @@ LABEL="${CHAINCODE_NAME}_${VERSION}"
 
 info "链码目录: $CHAINCODE_DIR"
 info "通道: $CHANNEL_NAME"
+info "链码语言: $CHAINCODE_LANG"
 info "组织: ${ORGS[*]}"
 info "背书策略: $SIGNATURE_POLICY"
 if [[ -n "$COLLECTIONS_CONFIG" ]]; then
@@ -148,7 +159,7 @@ else
   info "collections 配置: 未使用"
 fi
 
-PACKAGE_ARGS=(peer lifecycle chaincode package "$PKG_FILE" --path "$CHAINCODE_DIR" --lang node --label "$LABEL")
+PACKAGE_ARGS=(peer lifecycle chaincode package "$PKG_FILE" --path "$CHAINCODE_DIR" --lang "$CHAINCODE_LANG" --label "$LABEL")
 info "正在打包链码..."
 printf '执行命令: %q ' "${PACKAGE_ARGS[@]}"; printf '\n'
 "${PACKAGE_ARGS[@]}"

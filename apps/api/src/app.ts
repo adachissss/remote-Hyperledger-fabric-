@@ -3,6 +3,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppConfig } from './config.js';
 import {
+  FabricCliChaincodeRuntime,
+  type FabricChaincodeRuntime,
+} from './modules/chaincodes/fabric-chaincode-runtime.js';
+import { registerChaincodeRoutes } from './modules/chaincodes/chaincode-routes.js';
+import { ChaincodeService } from './modules/chaincodes/chaincode-service.js';
+import {
   FabricCliLedgerRuntime,
   type FabricLedgerRuntime,
 } from './modules/ledger/fabric-ledger-runtime.js';
@@ -12,8 +18,8 @@ import { createJobRegistry } from './modules/jobs/job-registry.js';
 import { registerJobRoutes } from './modules/jobs/job-routes.js';
 import { JobService } from './modules/jobs/job-service.js';
 import {
-  NodeLifecycleProcessRunner,
-  type LifecycleProcessRunner,
+  NodeProcessRunner,
+  type ProcessRunner,
 } from './modules/jobs/process-runner.js';
 import { DockerCliRuntime, type DockerRuntime } from './modules/networks/docker-runtime.js';
 import { NetworkImportService } from './modules/networks/network-import-service.js';
@@ -26,8 +32,9 @@ import { registerSystemRoutes } from './modules/system/system-routes.js';
 export type AppDependencies = {
   dockerRuntime?: DockerRuntime;
   serviceProbe?: ServiceProbe;
-  processRunner?: LifecycleProcessRunner;
+  processRunner?: ProcessRunner;
   ledgerRuntime?: FabricLedgerRuntime;
+  chaincodeRuntime?: FabricChaincodeRuntime;
 };
 
 export async function buildApp(
@@ -59,13 +66,21 @@ export async function buildApp(
   const jobService = new JobService(
     jobRegistry,
     networkRegistry,
-    dependencies.processRunner ?? new NodeLifecycleProcessRunner(),
+    dependencies.processRunner ?? new NodeProcessRunner(),
   );
   await jobService.initialize();
+  const ledgerRuntime = dependencies.ledgerRuntime ?? new FabricCliLedgerRuntime();
   const ledgerService = new LedgerService(
     networkRegistry,
     networkImportService,
-    dependencies.ledgerRuntime ?? new FabricCliLedgerRuntime(),
+    ledgerRuntime,
+  );
+  const chaincodeService = new ChaincodeService(
+    networkRegistry,
+    networkImportService,
+    ledgerRuntime,
+    dependencies.chaincodeRuntime ?? new FabricCliChaincodeRuntime(),
+    jobService,
   );
 
   app.addHook('onClose', async () => {
@@ -79,6 +94,10 @@ export async function buildApp(
   await app.register(registerLedgerRoutes, {
     prefix: '/api/v1/networks',
     ledgerService,
+  });
+  await app.register(registerChaincodeRoutes, {
+    prefix: '/api/v1/networks',
+    chaincodeService,
   });
   await app.register(registerNetworkRoutes, {
     prefix: '/api/v1/networks',

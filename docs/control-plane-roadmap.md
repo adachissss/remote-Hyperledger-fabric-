@@ -68,14 +68,18 @@
 
 目标：用可审计的通用界面管理任意受控链码，不绑定当前业务合约。
 
-- [ ] 已安装、已批准、已提交定义查询；
-- [ ] 部署/升级向导；
-- [ ] collection、endorsement policy 配置；
-- [ ] evaluate/submit 执行台；
-- [ ] transient 参数脱敏；
-- [ ] 交易回执和事件展示。
+- [x] 按组织查询已安装包、按动态通道查询已提交定义；
+- [ ] 各组织已批准定义的独立查询；
+- [x] 基于网络工作区相对路径的部署/升级表单；
+- [x] chaincode language、collections 配置路径和 signature policy 参数；
+- [x] 统一部署 Job、网络互斥、取消、超时、SSE 日志和异常恢复；
+- [ ] package/install/approve/readiness/commit/verify 结构化步骤与安全重试；
+- [x] evaluate/submit 执行台与可选背书组织；
+- [x] 通用 transient 字符串 map 编码，不进入日志和响应；
+- [x] 执行输出、响应状态、耗时与可获得的交易 ID 展示；
+- [ ] submit 后链码事件和最终区块验证状态关联。
 
-验收：可以部署仓库内链码，实时看到生命周期步骤，并从控制台安全执行 query/invoke。
+当前验收：可以从已注册工作区部署链码，通过实时日志观察脚本内部生命周期阶段，并从控制台执行 evaluate/submit。结构化分步骤重试和 submit 最终回执关联仍待完成。
 
 ## Phase 5 — Hardening
 

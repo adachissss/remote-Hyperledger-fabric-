@@ -19,6 +19,7 @@ usage() {
 - JSON 参数建议用单引号整体包裹。
 - bookmark 为空时可传 ""。
 - PDC 调用可追加：--transient-json '<私有JSON>'。
+- transient key 默认 asset_private_data，可通过 --transient-key <key> 修改。
 - 可通过 --target-orgs org1,org2 将背书请求限制到指定组织。
 EOF
 }
@@ -36,6 +37,7 @@ FUNC_NAME=$5
 shift 5
 
 TRANSIENT_JSON=""
+TRANSIENT_KEY="asset_private_data"
 TARGET_ORGS=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -48,6 +50,11 @@ while [[ $# -gt 0 ]]; do
     --target-orgs)
       [[ $# -ge 2 ]] || { error "ERROR: --target-orgs 缺少组织列表"; exit 1; }
       TARGET_ORGS="$2"
+      shift 2
+      ;;
+    --transient-key)
+      [[ $# -ge 2 ]] || { error "ERROR: --transient-key 缺少 key"; exit 1; }
+      TRANSIENT_KEY="$2"
       shift 2
       ;;
     --)
@@ -127,11 +134,14 @@ if [[ "$ACTION" == "invoke" && ${#PEER_CONN_ARGS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-ORDERER_ADDR=orderer1.example.com:7050
-ORDERER_TLS=${PROJECT_ROOT}/organizations/ordererOrganizations/example.com/orderers/orderer1.example.com/tls/ca.crt
+ORDERER_HOST=$(get_config_value_raw '.ordererOrg.nodes[0].host')
+ORDERER_PORT=$(get_config_value_raw '.ordererOrg.nodes[0].port')
+ORDERER_DOMAIN=$(get_config_value_raw '.ordererOrg.domain // .network.domain')
+ORDERER_ADDR=${ORDERER_HOST}:${ORDERER_PORT}
+ORDERER_TLS=${PROJECT_ROOT}/organizations/ordererOrganizations/${ORDERER_DOMAIN}/orderers/${ORDERER_HOST}/tls/ca.crt
 
 # Build chaincode args JSON
-CHAINCODE_PAYLOAD=$(python3 - "$FUNC_NAME" "${ARGS[@]:-}" <<'PY'
+CHAINCODE_PAYLOAD=$(python3 - "$FUNC_NAME" "${ARGS[@]}" <<'PY'
 import json, sys
 if len(sys.argv) < 2:
   print('{"Args":[]}')
@@ -144,12 +154,13 @@ PY
 
 TRANSIENT_PAYLOAD=""
 if [[ -n "$TRANSIENT_JSON" ]]; then
-  TRANSIENT_PAYLOAD=$(python3 - "$TRANSIENT_JSON" <<'PY'
+  TRANSIENT_PAYLOAD=$(python3 - "$TRANSIENT_KEY" "$TRANSIENT_JSON" <<'PY'
 import base64, json, sys
-raw = sys.argv[1]
+key = sys.argv[1]
+raw = sys.argv[2]
 json.loads(raw)
 encoded = base64.b64encode(raw.encode('utf-8')).decode('ascii')
-print(json.dumps({"asset_private_data": encoded}))
+print(json.dumps({key: encoded}))
 PY
   )
 fi
@@ -161,7 +172,7 @@ printf "Action   : ${ACTION}\n"
 printf "Function : ${FUNC_NAME}\n"
 echo "Args     : ${ARGS[*]:-<none>}"
 if [[ -n "$TRANSIENT_JSON" ]]; then
-  echo "Transient: asset_private_data (${#TRANSIENT_JSON} bytes, value redacted)"
+  echo "Transient: ${TRANSIENT_KEY} (${#TRANSIENT_JSON} bytes, value redacted)"
 fi
 if [[ -n "$TARGET_ORGS" ]]; then
   echo "Targets  : $TARGET_ORGS"
@@ -173,10 +184,6 @@ cat <<CMD
 
 
 peer chaincode ${ACTION} \\
-  -o ${ORDERER_ADDR} \\
-  --ordererTLSHostnameOverride orderer1.example.com \\
-  --tls \\
-  --cafile ${ORDERER_TLS} \\
   -C ${CHANNEL_NAME} \\
   -n ${CHAINCODE_NAME} \\
   -c '${CHAINCODE_PAYLOAD}'
@@ -191,10 +198,6 @@ fi
 
 cmd=(
   peer chaincode "$ACTION"
-  -o "$ORDERER_ADDR"
-  --ordererTLSHostnameOverride orderer1.example.com
-  --tls
-  --cafile "$ORDERER_TLS"
   -C "$CHANNEL_NAME"
   -n "$CHAINCODE_NAME"
   -c "$CHAINCODE_PAYLOAD"
@@ -205,7 +208,15 @@ if [[ -n "$TRANSIENT_PAYLOAD" ]]; then
 fi
 
 if [[ "$ACTION" == "invoke" ]]; then
-  cmd+=("${PEER_CONN_ARGS[@]}" --waitForEvent --waitForEventTimeout 30s)
+  cmd+=(
+    -o "$ORDERER_ADDR"
+    --ordererTLSHostnameOverride "$ORDERER_HOST"
+    --tls
+    --cafile "$ORDERER_TLS"
+    "${PEER_CONN_ARGS[@]}"
+    --waitForEvent
+    --waitForEventTimeout 30s
+  )
 fi
 
 # set -x

@@ -47,9 +47,12 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 - 多网络注册、配置、拓扑和节点运行状态查看；
 - `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
 - 动态通道发现、账本高度、区块分页和 Fabric protobuf 明文解析；
+- 已安装包与已提交链码清单、通用部署作业以及 evaluate/submit 执行台；
 - 默认简体中文的亮色 Web 控制台。
 
-链码通用部署/升级与执行台是下一阶段；Caliper 仍暂缓。
+链码部署从已注册网络工作区内的相对源码路径读取，不预置示例链码。部署继续调用工作区原有的 `upgrade_chaincode.sh`，日志、取消、超时和网络互斥沿用统一作业系统；命令行入口不受影响。当前部署过程记录为单个脚本步骤，后续再拆分为可独立重试的 package/install/approve/readiness/commit 结构化步骤。
+
+Caliper 仍暂缓。
 
 ## 仓库边界
 

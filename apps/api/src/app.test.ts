@@ -6,6 +6,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  ChaincodeInventoryResponseSchema,
+  ContractExecutionResultSchema,
   HealthResponseSchema,
   JobEventListResponseSchema,
   JobListResponseSchema,
@@ -24,8 +26,9 @@ import { buildApp } from './app.js';
 import { loadConfig, type AppConfig } from './config.js';
 import type { DockerRuntime } from './modules/networks/docker-runtime.js';
 import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
-import type { LifecycleProcessRunner } from './modules/jobs/process-runner.js';
+import type { ProcessRunner } from './modules/jobs/process-runner.js';
 import type { FabricLedgerRuntime } from './modules/ledger/fabric-ledger-runtime.js';
+import type { FabricChaincodeRuntime } from './modules/chaincodes/fabric-chaincode-runtime.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -81,12 +84,18 @@ const unreachableServiceProbe: ServiceProbe = {
   },
 };
 
-const successfulProcessRunner: LifecycleProcessRunner = {
+const successfulProcessRunner: ProcessRunner = {
   async run(request) {
-    assert.equal(request.action, 'restart');
-    assert.equal(request.executable, path.join(request.cwd, 'network.sh'));
-    assert.equal(request.composeProject, 'network_a');
-    await request.onLine({ stream: 'stdout', message: 'network restart completed' });
+    assert.equal(request.environment.COMPOSE_PROJECT_NAME, 'network_a');
+    if (request.executable.endsWith('network.sh')) {
+      assert.deepEqual(request.args, ['restart']);
+      await request.onLine({ stream: 'stdout', message: 'network restart completed' });
+    } else {
+      assert(request.executable.endsWith('upgrade_chaincode.sh'));
+      assert(request.args.includes('--name'));
+      assert(request.args.includes('assetcc'));
+      await request.onLine({ stream: 'stdout', message: 'chaincode deployment completed' });
+    }
     return { exitCode: 0, signal: null, cancelled: false, timedOut: false };
   },
 };
@@ -116,6 +125,37 @@ const observableLedgerRuntime: FabricLedgerRuntime = {
       data: { data: [] },
       metadata: { metadata: [] },
     }).finish();
+  },
+};
+
+const observableChaincodeRuntime: FabricChaincodeRuntime = {
+  async queryInstalled(peer) {
+    assert.equal(peer.organizationName, 'org1');
+    return [{ packageId: 'assetcc_1.0:package-hash', label: 'assetcc_1.0' }];
+  },
+  async queryCommitted(peer, channelName) {
+    assert.equal(peer.mspId, 'Org1MSP');
+    assert.equal(channelName, 'channel-a');
+    return [
+      {
+        name: 'assetcc',
+        version: '1.0',
+        sequence: 1,
+        endorsementPlugin: 'escc',
+        validationPlugin: 'vscc',
+        validationParameterBase64: 'cG9saWN5',
+        approvals: { Org1MSP: true },
+      },
+    ];
+  },
+  async executeContract(input) {
+    assert.equal(input.request.chaincodeName, 'assetcc');
+    assert.equal(input.invokingPeer.organizationName, 'org1');
+    return {
+      transactionId: input.mode === 'submit' ? 'a'.repeat(64) : null,
+      responseStatus: 200,
+      output: Buffer.from('{"ok":true}'),
+    };
   },
 };
 
@@ -261,6 +301,12 @@ channels:
   );
   writeFileSync(path.join(workspaceRoot, 'network.sh'), '#!/usr/bin/env bash\nexit 0\n');
   chmodSync(path.join(workspaceRoot, 'network.sh'), 0o755);
+  writeFileSync(
+    path.join(workspaceRoot, 'upgrade_chaincode.sh'),
+    '#!/usr/bin/env bash\nexit 0\n',
+  );
+  chmodSync(path.join(workspaceRoot, 'upgrade_chaincode.sh'), 0o755);
+  mkdirSync(path.join(workspaceRoot, 'chaincode', 'assetcc'), { recursive: true });
   const peerExecutable = path.join(workspaceRoot, 'bin', 'peer');
   mkdirSync(path.dirname(peerExecutable), { recursive: true });
   writeFileSync(peerExecutable, '#!/usr/bin/env bash\nexit 0\n');
@@ -302,6 +348,7 @@ channels:
       serviceProbe: reachableServiceProbe,
       processRunner: successfulProcessRunner,
       ledgerRuntime: observableLedgerRuntime,
+      chaincodeRuntime: observableChaincodeRuntime,
     });
     try {
       const importResponse = await app.inject({
@@ -486,11 +533,71 @@ channels:
       const jobEvents = JobEventListResponseSchema.parse(jobEventsResponse.json());
       assert(jobEvents.items.some((event) => event.message === 'network restart completed'));
 
+      const inventoryResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/chaincodes',
+      });
+      assert.equal(inventoryResponse.statusCode, 200);
+      const inventory = ChaincodeInventoryResponseSchema.parse(inventoryResponse.json());
+      assert.deepEqual(inventory.channels, ['channel-a']);
+      assert.equal(inventory.installedPackages[0]?.label, 'assetcc_1.0');
+      assert.equal(inventory.committedDefinitions[0]?.name, 'assetcc');
+
+      const evaluateResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/network-a/contracts/evaluate',
+        payload: {
+          channelName: 'channel-a',
+          chaincodeName: 'assetcc',
+          organization: 'org1',
+          functionName: 'ReadAsset',
+          arguments: ['asset-1'],
+        },
+      });
+      assert.equal(evaluateResponse.statusCode, 200);
+      const evaluation = ContractExecutionResultSchema.parse(evaluateResponse.json());
+      assert.deepEqual(evaluation.output.json, { ok: true });
+      assert.equal(evaluation.transactionId, null);
+
+      const submitResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/network-a/contracts/submit',
+        payload: {
+          channelName: 'channel-a',
+          chaincodeName: 'assetcc',
+          organization: 'org1',
+          functionName: 'CreateAsset',
+          arguments: ['asset-1'],
+          targetOrganizations: ['org1'],
+          transient: { secret: 'redacted-value' },
+        },
+      });
+      const submission = ContractExecutionResultSchema.parse(submitResponse.json());
+      assert.equal(submission.transactionId, 'a'.repeat(64));
+
+      const deploymentResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/network-a/chaincodes/deployments',
+        payload: {
+          channelName: 'channel-a',
+          name: 'assetcc',
+          version: '1.1',
+          sequence: 2,
+          language: 'node',
+          sourcePath: 'chaincode/assetcc',
+        },
+      });
+      assert.equal(deploymentResponse.statusCode, 202);
+      const deploymentJob = JobSchema.parse(deploymentResponse.json());
+      assert.equal(deploymentJob.kind, 'chaincode-deployment');
+      assert.equal(deploymentJob.context.name, 'assetcc');
+      await waitForJob(app, deploymentJob.id, 'succeeded');
+
       const jobsResponse = await app.inject({
         method: 'GET',
         url: '/api/v1/jobs?networkId=network-a',
       });
-      assert.equal(JobListResponseSchema.parse(jobsResponse.json()).total, 1);
+      assert.equal(JobListResponseSchema.parse(jobsResponse.json()).total, 2);
     } finally {
       await app.close();
     }
