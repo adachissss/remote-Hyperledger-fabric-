@@ -52,13 +52,15 @@
 
 目标：实现可核验的区块和交易解析。
 
-- [ ] 通道高度与区块分页；
-- [ ] 历史区块获取；
-- [ ] `fabric-protos` 递归解码；
-- [ ] 交易 header、creator、chaincode action、endorsements；
-- [ ] 公共 read/write set 明文与原始值双视图；
-- [ ] validation code、区块哈希链校验；
-- [ ] Blocks、Transactions 页面。
+- [x] 从实际 Peer 动态发现通道、查询高度与区块分页；
+- [x] 通过 Peer QSCC 获取任意历史区块和最终交易验证码；
+- [x] `fabric-protos` 递归解码；
+- [x] 交易 header、creator、chaincode action、endorsements；
+- [x] 链码响应、事件和公共 read/write set 明文与 base64 原值双视图；
+- [x] PDC hashed RW set 集合名、计数和哈希摘要；
+- [x] validation code 与可读验证结果；
+- [ ] 显式区块哈希链校验；
+- [x] 中文 Ledger 页面、通道切换、Blocks 分页与 Transactions 展开详情。
 
 验收：任意已存在区块可解析到交易和公共读写集；UI 对 transient/PDC 不可恢复部分有明确提示。
 

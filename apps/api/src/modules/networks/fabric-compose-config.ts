@@ -73,6 +73,8 @@ export type FabricComposeConfigSnapshot = {
   channelCount: number;
   nodeCount: number;
   dockerNetwork: string;
+  envPrefix: string;
+  ordererDomain: string;
 };
 
 export function readFabricComposeConfig(
@@ -283,6 +285,8 @@ export function readFabricComposeConfig(
     channelCount: channels.length,
     nodeCount: nodes.length,
     dockerNetwork: config.network.name,
+    envPrefix,
+    ordererDomain,
   };
 }
 

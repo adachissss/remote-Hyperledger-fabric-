@@ -34,7 +34,7 @@
 apps/
 ├── api/                 Fastify 控制平面 API
 │   └── src/
-│       ├── modules/     network、topology、nodes、blocks、chaincodes、jobs
+│       ├── modules/     networks、ledger、jobs，以及后续 chaincodes
 │       ├── adapters/    shell、docker、fabric-gateway
 │       ├── infrastructure/
 │       └── server.ts
@@ -46,7 +46,7 @@ apps/
         └── styles/
 packages/
 └── shared/              Zod schema、DTO、枚举和共享工具
-runtime/                 SQLite、作业日志、临时区块文件；全部忽略
+runtime/                 SQLite 和本地运行状态；全部忽略
 docs/                    架构、路线图和运行手册
 ```
 
@@ -84,7 +84,7 @@ flowchart LR
 | 通道加入 | `script/osnadmin-examples.sh`、`joinChannel.sh` | 网络部署作业步骤 |
 | 链码部署 | `upgrade_chaincode.sh` | 分步骤生命周期作业 |
 | 链码调用 | `smart_contract_execute.sh` | 参数白名单 + query/invoke API |
-| 区块信息 | Fabric CLI/Gateway 尚未封装 | 新增 Block Service |
+| 区块信息 | Peer CLI + QSCC + `fabric-protos` | Ledger Service 结构化解析 |
 | Caliper | 尚未接入 | 后续 Test Plan/Run/Report 模块 |
 
 ## 6. 后端模块
@@ -197,6 +197,19 @@ Operations 页面提供四个生命周期入口、作业取消、历史步骤和
 - 只有具备集合权限的组织才能另行查询当前私有数据；
 - 加密后的业务字段只能展示密文，除非系统另有解密密钥与授权。
 
+当前 Ledger Service 已落地为无状态只读服务。它不依赖配置文件中预先声明 `channels`，而是依次使用已注册网络中各 Peer 的管理员 MSP 与 TLS 上下文执行 `peer channel list`，动态汇总实际加入的通道；`peer channel getinfo` 提供高度与当前哈希。区块通过目标 Peer 的 QSCC `GetBlockByNumber` 查询，而不是从 Orderer fetch，这样返回的区块包含 Peer 最终提交后的 `TRANSACTIONS_FILTER`，可以展示真实 validation code。
+
+获取到的 `common.Block` 由 `fabric-protos` 在请求内递归解码，当前支持：
+
+- 区块摘要、哈希、时间、交易数量和分页；
+- Envelope、ChannelHeader、SignatureHeader 与 Creator MSP/证书主体；
+- Chaincode invocation、函数、参数、proposal response、背书和事件；
+- TxReadWriteSet、KVRWSet 与公共状态 JSON/UTF-8/base64 双视图；
+- PDC hashed RW set 的集合名、计数和哈希摘要；
+- Peer 最终交易验证码和可读标签。
+
+账本查询结果不写入 SQLite，所有资源继续以 `networkId` 和动态 `channelName` 隔离。后续可增加短时缓存、交易 ID 索引和显式区块哈希链校验。
+
 ### 6.5 Chaincode Service
 
 核心平台不绑定任何具体链码。初期只允许从服务端注册的 Chaincode Catalog 部署受控源码目录，避免通过上传任意链码获得宿主机/Docker 执行能力。Catalog 由管理员显式维护，不预置演示条目。
@@ -228,9 +241,10 @@ GET    /api/v1/jobs/:jobId
 GET    /api/v1/jobs/:jobId/events
 POST   /api/v1/jobs/:jobId/cancel
 
+GET    /api/v1/networks/:id/channels
 GET    /api/v1/networks/:id/channels/:channel/blocks
 GET    /api/v1/networks/:id/channels/:channel/blocks/:number
-GET    /api/v1/networks/:id/transactions/:txId
+GET    /api/v1/networks/:id/transactions/:txId                 # planned
 
 GET    /api/v1/networks/:id/chaincodes
 POST   /api/v1/networks/:id/chaincodes/deployments
@@ -250,11 +264,11 @@ Selected Network
 ├── Topology
 ├── Nodes
 ├── Configuration
-└── Operations
-Ledger
-├── Channels
-├── Blocks
-└── Transactions
+├── Operations
+└── Ledger
+    ├── Dynamically discovered Channels
+    ├── Paginated Blocks
+    └── Expanded Transactions and RW Sets
 Chaincodes
 ├── Catalog
 ├── Installed / Committed

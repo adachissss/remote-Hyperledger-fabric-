@@ -2,7 +2,7 @@
 
 本项目使用 Bash、Docker Compose 和 Hyperledger Fabric CLI 自动生成并运行一个三组织、三 Orderer 的本地 Fabric 网络。业务链码位于 `chaincode/rsidentity-v1` 和 `chaincode/rsdata-v1`。
 
-仓库同时正在建设一个通用的多网络 Fabric Control Plane。它不预置任何网络实例或链码，架构和迭代计划见：
+仓库同时包含一个通用的多网络 Fabric Control Plane。它不预置任何网络实例或链码，架构和迭代计划见：
 
 - `docs/control-plane-architecture.md`
 - `docs/control-plane-roadmap.md`
@@ -39,6 +39,17 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 导入包含可执行 `network.sh` 的工作区后，可以从网络详情的“运维”页面执行 `up`、`stop`、`restart` 和 `down`。控制平面会继续调用原脚本，并使用注册时保存的工作区、配置文件和 Compose project；原有命令行方式不受影响。作业步骤、退出码和实时日志保存在本地 SQLite 中，同一网络不会并发执行两个生命周期操作。
 
 `down` 会删除卷、组织材料和通道产物，网页端需要输入网络 ID 确认。也可以继续直接使用下文的 `./network.sh down`。
+
+网络运行后，可以从网络详情的“账本”页面动态发现 Peer 已加入的通道、查看账本高度、分页浏览历史区块，并展开交易明文。后端通过 Peer QSCC 读取最终提交的区块，使用 `fabric-protos` 递归解析交易验证结果、Creator、链码函数与参数、背书、响应、事件和公共读写集。JSON/UTF-8 值提供明文与 base64 原值双视图；transient 数据和私有集合明文不在公共区块中，页面只展示可验证的私有集合哈希摘要。
+
+当前 Control Plane 已实现：
+
+- 多网络注册、配置、拓扑和节点运行状态查看；
+- `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
+- 动态通道发现、账本高度、区块分页和 Fabric protobuf 明文解析；
+- 默认简体中文的亮色 Web 控制台。
+
+链码通用部署/升级与执行台是下一阶段；Caliper 仍暂缓。
 
 ## 仓库边界
 

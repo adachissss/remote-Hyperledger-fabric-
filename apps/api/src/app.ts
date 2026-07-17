@@ -2,6 +2,12 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppConfig } from './config.js';
+import {
+  FabricCliLedgerRuntime,
+  type FabricLedgerRuntime,
+} from './modules/ledger/fabric-ledger-runtime.js';
+import { registerLedgerRoutes } from './modules/ledger/ledger-routes.js';
+import { LedgerService } from './modules/ledger/ledger-service.js';
 import { createJobRegistry } from './modules/jobs/job-registry.js';
 import { registerJobRoutes } from './modules/jobs/job-routes.js';
 import { JobService } from './modules/jobs/job-service.js';
@@ -21,6 +27,7 @@ export type AppDependencies = {
   dockerRuntime?: DockerRuntime;
   serviceProbe?: ServiceProbe;
   processRunner?: LifecycleProcessRunner;
+  ledgerRuntime?: FabricLedgerRuntime;
 };
 
 export async function buildApp(
@@ -55,6 +62,11 @@ export async function buildApp(
     dependencies.processRunner ?? new NodeLifecycleProcessRunner(),
   );
   await jobService.initialize();
+  const ledgerService = new LedgerService(
+    networkRegistry,
+    networkImportService,
+    dependencies.ledgerRuntime ?? new FabricCliLedgerRuntime(),
+  );
 
   app.addHook('onClose', async () => {
     await jobService.close();
@@ -64,6 +76,10 @@ export async function buildApp(
 
   await app.register(registerSystemRoutes, { prefix: '/api/v1/system', startedAt });
   await app.register(registerJobRoutes, { prefix: '/api/v1/jobs', jobService });
+  await app.register(registerLedgerRoutes, {
+    prefix: '/api/v1/networks',
+    ledgerService,
+  });
   await app.register(registerNetworkRoutes, {
     prefix: '/api/v1/networks',
     networkRegistry,

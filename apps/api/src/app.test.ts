@@ -10,17 +10,22 @@ import {
   JobEventListResponseSchema,
   JobListResponseSchema,
   JobSchema,
+  LedgerBlockListResponseSchema,
+  LedgerBlockSchema,
+  LedgerChannelListResponseSchema,
   NetworkListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
   NetworkTopologyResponseSchema,
 } from '@plus-fabric/shared';
+import fabricProtos from 'fabric-protos';
 
 import { buildApp } from './app.js';
 import { loadConfig, type AppConfig } from './config.js';
 import type { DockerRuntime } from './modules/networks/docker-runtime.js';
 import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
 import type { LifecycleProcessRunner } from './modules/jobs/process-runner.js';
+import type { FabricLedgerRuntime } from './modules/ledger/fabric-ledger-runtime.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -83,6 +88,34 @@ const successfulProcessRunner: LifecycleProcessRunner = {
     assert.equal(request.composeProject, 'network_a');
     await request.onLine({ stream: 'stdout', message: 'network restart completed' });
     return { exitCode: 0, signal: null, cancelled: false, timedOut: false };
+  },
+};
+
+const observableLedgerRuntime: FabricLedgerRuntime = {
+  async listChannels(peer) {
+    assert.equal(peer.mspId, 'Org1MSP');
+    assert.equal(peer.address, 'peer0.org1.network-a.test:7051');
+    return ['channel-a'];
+  },
+  async getChannelInfo(_peer, channelName) {
+    assert.equal(channelName, 'channel-a');
+    return {
+      height: '13',
+      currentBlockHash: 'current-block-hash',
+      previousBlockHash: 'previous-block-hash',
+    };
+  },
+  async fetchBlock(_peer, channelName, blockNumber) {
+    assert.equal(channelName, 'channel-a');
+    return fabricProtos.common.Block.encode({
+      header: {
+        number: Number(blockNumber),
+        previous_hash: Buffer.from(`previous-${blockNumber}`),
+        data_hash: Buffer.from(`data-${blockNumber}`),
+      },
+      data: { data: [] },
+      metadata: { metadata: [] },
+    }).finish();
   },
 };
 
@@ -228,6 +261,35 @@ channels:
   );
   writeFileSync(path.join(workspaceRoot, 'network.sh'), '#!/usr/bin/env bash\nexit 0\n');
   chmodSync(path.join(workspaceRoot, 'network.sh'), 0o755);
+  const peerExecutable = path.join(workspaceRoot, 'bin', 'peer');
+  mkdirSync(path.dirname(peerExecutable), { recursive: true });
+  writeFileSync(peerExecutable, '#!/usr/bin/env bash\nexit 0\n');
+  chmodSync(peerExecutable, 0o755);
+  const identityDomain = 'network-a-docker-org1.network-a.test';
+  const peerHost = 'peer0.org1.network-a.test';
+  const peerRoot = path.join(
+    workspaceRoot,
+    'organizations',
+    'peerOrganizations',
+    identityDomain,
+  );
+  mkdirSync(path.join(peerRoot, 'users', `Admin@${identityDomain}`, 'msp'), {
+    recursive: true,
+  });
+  mkdirSync(path.join(peerRoot, 'peers', peerHost, 'tls'), { recursive: true });
+  writeFileSync(path.join(peerRoot, 'peers', peerHost, 'tls', 'ca.crt'), 'test-ca');
+  writeFileSync(path.join(peerRoot, 'peers', peerHost, 'core.yaml'), 'peer: {}\n');
+  const ordererTlsDirectory = path.join(
+    workspaceRoot,
+    'organizations',
+    'ordererOrganizations',
+    'network-a.test',
+    'orderers',
+    'orderer1.network-a.test',
+    'tls',
+  );
+  mkdirSync(ordererTlsDirectory, { recursive: true });
+  writeFileSync(path.join(ordererTlsDirectory, 'ca.crt'), 'test-orderer-ca');
 
   const config = createTestConfig({
     CONTROL_PLANE_ALLOWED_NETWORK_ROOTS: temporaryRoot,
@@ -239,6 +301,7 @@ channels:
       dockerRuntime: observableDockerRuntime,
       serviceProbe: reachableServiceProbe,
       processRunner: successfulProcessRunner,
+      ledgerRuntime: observableLedgerRuntime,
     });
     try {
       const importResponse = await app.inject({
@@ -295,6 +358,31 @@ channels:
         topology.nodes.map((node) => node.type).sort(),
         ['ca', 'ca', 'orderer', 'peer'],
       );
+
+      const channelsResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/channels',
+      });
+      assert.equal(channelsResponse.statusCode, 200);
+      const channels = LedgerChannelListResponseSchema.parse(channelsResponse.json());
+      assert.equal(channels.items[0]?.name, 'channel-a');
+      assert.equal(channels.items[0]?.height, '13');
+      assert.equal(channels.items[0]?.currentBlockNumber, '12');
+
+      const blocksResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/channels/channel-a/blocks?limit=2',
+      });
+      const blocks = LedgerBlockListResponseSchema.parse(blocksResponse.json());
+      assert.deepEqual(blocks.items.map((block) => block.number), ['12', '11']);
+
+      const blockResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/network-a/channels/channel-a/blocks/12',
+      });
+      const block = LedgerBlockSchema.parse(blockResponse.json());
+      assert.equal(block.number, '12');
+      assert.equal(block.dataHash, Buffer.from('data-12').toString('hex'));
 
       const nodesResponse = await app.inject({
         method: 'GET',

@@ -33,6 +33,14 @@ const apiErrorMessages: Record<string, string> = {
   network_confirmation_required: '清理网络前必须输入当前网络 ID 进行确认。',
   network_script_unavailable: '该网络工作区没有可执行的 network.sh。',
   invalid_network_action: '不支持该网络操作。',
+  invalid_channel_name: '通道名称格式不正确。',
+  channel_not_found: '当前网络的 Peer 未加入该通道。',
+  invalid_block_query: '区块分页参数不正确。',
+  invalid_block_number: '区块编号格式不正确。',
+  ledger_context_unavailable: '缺少查询账本所需的 Fabric CLI、管理员身份或 TLS 文件。',
+  ledger_unavailable: '暂时无法从 Fabric Peer 读取账本，请确认网络和节点正在运行。',
+  channel_scope_mismatch: '控制平面返回了其他通道的数据，已拒绝显示。',
+  block_scope_mismatch: '控制平面返回了其他区块的数据，已拒绝显示。',
 };
 
 const runtimeStateLabels: Record<NetworkNodeRuntimeState, string> = {

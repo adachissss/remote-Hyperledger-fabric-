@@ -5,6 +5,9 @@ import {
   JobEventSchema,
   JobListResponseSchema,
   JobSchema,
+  LedgerBlockListResponseSchema,
+  LedgerBlockSchema,
+  LedgerChannelListResponseSchema,
   NetworkListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
@@ -17,6 +20,9 @@ import {
   type JobEvent,
   type JobEventListResponse,
   type JobListResponse,
+  type LedgerBlock,
+  type LedgerBlockListResponse,
+  type LedgerChannelListResponse,
   type NetworkListResponse,
   type NetworkNode,
   type NetworkNodeListResponse,
@@ -115,6 +121,59 @@ export async function getNetworkConfiguration(
   );
   assertNetworkScope(networkId, configuration.networkId);
   return configuration;
+}
+
+export async function getLedgerChannels(networkId: string): Promise<LedgerChannelListResponse> {
+  const channels = LedgerChannelListResponseSchema.parse(
+    await requestJson(`/api/v1/networks/${encodeURIComponent(networkId)}/channels`),
+  );
+  assertNetworkScope(networkId, channels.networkId);
+  return channels;
+}
+
+export async function getLedgerBlocks(
+  networkId: string,
+  channelName: string,
+  options: { limit?: number; before?: string } = {},
+): Promise<LedgerBlockListResponse> {
+  const query = new URLSearchParams();
+  query.set('limit', String(options.limit ?? 10));
+  if (options.before !== undefined) query.set('before', options.before);
+  const blocks = LedgerBlockListResponseSchema.parse(
+    await requestJson(
+      `/api/v1/networks/${encodeURIComponent(networkId)}/channels/${encodeURIComponent(channelName)}/blocks?${query.toString()}`,
+    ),
+  );
+  assertNetworkScope(networkId, blocks.networkId);
+  if (blocks.channelName !== channelName) {
+    throw new ControlPlaneApiError(
+      '控制平面返回了其他通道的数据。',
+      502,
+      'channel_scope_mismatch',
+    );
+  }
+  return blocks;
+}
+
+export async function getLedgerBlock(
+  networkId: string,
+  channelName: string,
+  blockNumber: string,
+): Promise<LedgerBlock> {
+  const block = LedgerBlockSchema.parse(
+    await requestJson(
+      `/api/v1/networks/${encodeURIComponent(networkId)}/channels/${encodeURIComponent(channelName)}/blocks/${encodeURIComponent(blockNumber)}`,
+    ),
+  );
+  assertNetworkScope(networkId, block.networkId);
+  if (block.channelName !== channelName || block.number !== blockNumber) {
+    throw new ControlPlaneApiError(
+      '控制平面返回了其他区块的数据。',
+      502,
+      'block_scope_mismatch',
+    );
+  }
+  return block;
 }
 
 export async function getJobs(networkId?: string): Promise<JobListResponse> {
