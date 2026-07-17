@@ -569,6 +569,18 @@ a {
   text-decoration: none;
   text-transform: none;
   border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.primary-action svg,
+.secondary-action svg {
+  transition: transform 150ms ease;
 }
 
 .primary-action {
@@ -581,6 +593,31 @@ a {
   color: var(--text);
   background: #ffffff;
   border-color: var(--line-strong);
+}
+
+.primary-action:hover:not(:disabled) {
+  background: #076f5d;
+  box-shadow: 0 15px 32px rgba(8, 127, 105, 0.26);
+  transform: translateY(-2px);
+}
+
+.secondary-action:hover:not(:disabled) {
+  color: #076f5d;
+  background: var(--cyan-soft);
+  border-color: rgba(8, 127, 105, 0.42);
+  box-shadow: 0 10px 24px rgba(35, 77, 64, 0.1);
+  transform: translateY(-2px);
+}
+
+.primary-action:hover:not(:disabled) svg,
+.secondary-action:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+
+.primary-action:active:not(:disabled),
+.secondary-action:active:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(35, 77, 64, 0.12);
+  transform: translateY(0);
 }
 
 button:disabled {
