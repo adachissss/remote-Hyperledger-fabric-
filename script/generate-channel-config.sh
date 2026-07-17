@@ -100,7 +100,7 @@ cat >> "$CONFIGTX_YAML" <<ORDERER
 ORDERER
 
 # 固定写入 Capabilities + ApplicationDefaults + OrdererDefaults
-cat >> "$CONFIGTX_YAML" <<'EOF'
+cat >> "$CONFIGTX_YAML" <<EOF
 
 Capabilities:
   Channel: &ChannelCapabilities
@@ -160,7 +160,7 @@ export domain="$ORDERER_DOMAIN"
   "        ServerTLSCert: ../organizations/ordererOrganizations/" + env(domain) + "/orderers/" + .host + "/tls/server.crt"
 ' "$CONFIG_FILE" >> "$CONFIGTX_YAML"
 
-cat >> "$CONFIGTX_YAML" <<'EOF'
+cat >> "$CONFIGTX_YAML" <<EOF
     Options:
       TickInterval: 500ms
       ElectionTick: 10
@@ -199,7 +199,7 @@ Channel: &ChannelDefaults
 
 Profiles:
 
-  ThreeOrgsOrdererGenesis:
+  ${GENESIS_PROFILE}:
     <<: *ChannelDefaults
     Orderer:
       <<: *OrdererDefaults
@@ -207,22 +207,31 @@ Profiles:
         - *OrdererOrg
       Capabilities:
         <<: *OrdererCapabilities
-    Consortiums:
-      SampleConsortium:
-        Organizations:
 EOF
 
-# 自动写入所有 Peer 组织到创世块
-for org in "${PEER_ORGS[@]}"; do
-  echo "          - *${org^}" >> "$CONFIGTX_YAML"
+mapfile -t CONSORTIUMS < <(
+  get_config_value_raw '.channels[] | (.consortium // "SampleConsortium")' | awk 'NF && !seen[$0]++'
+)
+echo "    Consortiums:" >> "$CONFIGTX_YAML"
+for consortium in "${CONSORTIUMS[@]}"; do
+  echo "      ${consortium}:" >> "$CONFIGTX_YAML"
+  echo "        Organizations:" >> "$CONFIGTX_YAML"
+  for org in "${PEER_ORGS[@]}"; do
+    echo "          - *${org^}" >> "$CONFIGTX_YAML"
+  done
 done
 
-# 写入默认单通道 Profile
-cat >> "$CONFIGTX_YAML" <<EOF
+mapfile -t CHANNEL_NAMES < <(get_channel_names)
+for channel_name in "${CHANNEL_NAMES[@]}"; do
+  channel_profile=$(get_channel_profile "$channel_name")
+  channel_consortium=$(get_channel_consortium "$channel_name")
+  mapfile -t channel_members < <(get_channel_member_orgs "$channel_name")
 
-  ${PRIMARY_CHANNEL_PROFILE}:
+  cat >> "$CONFIGTX_YAML" <<EOF
+
+  ${channel_profile}:
     <<: *ChannelDefaults
-    Consortium: ${PRIMARY_CHANNEL_CONSORTIUM}
+    Consortium: ${channel_consortium}
     Orderer:
       <<: *OrdererDefaults
       Organizations:
@@ -234,11 +243,11 @@ cat >> "$CONFIGTX_YAML" <<EOF
       Organizations:
 EOF
 
-for org in "${PEER_ORGS[@]}"; do
-  echo "        - *${org^}" >> "$CONFIGTX_YAML"
-done
+  for org in "${channel_members[@]}"; do
+    echo "        - *${org^}" >> "$CONFIGTX_YAML"
+  done
 
-cat >> "$CONFIGTX_YAML" <<'EOF'
+  cat >> "$CONFIGTX_YAML" <<'EOF'
       Policies:
         Readers:
           Type: ImplicitMeta
@@ -255,27 +264,29 @@ cat >> "$CONFIGTX_YAML" <<'EOF'
       Capabilities:
         <<: *ApplicationCapabilities
 EOF
+done
 
 success "完整 configtx.yaml 已生成！"
 
-# ====================== 生成创世块 + 通道交易 + 锚节点更新 ======================
+# ====================== 生成所有通道配置块和交易文件 ======================
 info "正在生成通道相关文件..."
 
+for channel_name in "${CHANNEL_NAMES[@]}"; do
+  channel_profile=$(get_channel_profile "$channel_name")
+  "$CONFIGTXGEN" -configPath "${PROJECT_ROOT}/config" \
+    -profile "$channel_profile" \
+    -channelID "$channel_name" \
+    -outputBlock "${CHANNEL_ARTIFACTS}/${channel_name}.block"
+  "$CONFIGTXGEN" -configPath "${PROJECT_ROOT}/config" \
+    -profile "$channel_profile" \
+    -channelID "$channel_name" \
+    -outputCreateChannelTx "${CHANNEL_ARTIFACTS}/${channel_name}.tx"
+done
 
-"$CONFIGTXGEN" -configPath "${PROJECT_ROOT}/config" \
-  -profile "$GENESIS_PROFILE" \
-  -channelID "$PRIMARY_CHANNEL_NAME" \
-  -outputBlock "${CHANNEL_ARTIFACTS}/genesis.block"
-
-"$CONFIGTXGEN" -configPath "${PROJECT_ROOT}/config" \
-  -profile "$PRIMARY_CHANNEL_PROFILE" \
-  -channelID "$PRIMARY_CHANNEL_NAME" \
-  -outputCreateChannelTx "${CHANNEL_ARTIFACTS}/${PRIMARY_CHANNEL_NAME}.tx"
-
+cp "${CHANNEL_ARTIFACTS}/${PRIMARY_CHANNEL_NAME}.block" "${CHANNEL_ARTIFACTS}/genesis.block"
 
 info "所有工作完成！"
 success "   configtx.yaml → 完整可用"
-success "   创世块 → ${CHANNEL_ARTIFACTS}/genesis.block"
-success "   默认通道 → ${PRIMARY_CHANNEL_NAME}"
-success "   通道交易 → ${CHANNEL_ARTIFACTS}/${PRIMARY_CHANNEL_NAME}.tx"
+success "   通道数量 → ${#CHANNEL_NAMES[@]}"
+success "   主通道兼容块 → ${CHANNEL_ARTIFACTS}/genesis.block"
 info "=================================================="

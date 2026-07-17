@@ -222,13 +222,14 @@ copy_tls_files() {
 # 核心操作函数
 enroll_ca_admin() {
   local ca_name="$1" ca_url="$2" tls_cert="$3" home="$4"
+  local bootstrap_password="${5:-adminpw}"
 
   check_file_exists "$tls_cert"
   check_ca_reachable "$ca_url"
 
   export FABRIC_CA_CLIENT_HOME="$home"
   "$FABRIC_CA_CLIENT" enroll \
-    -u "https://admin:adminpw@${ca_url#https://}" \
+    -u "https://admin:${bootstrap_password}@${ca_url#https://}" \
     --caname "$ca_name" \
     --tls.certfiles "$tls_cert" >/dev/null
 }

@@ -75,7 +75,7 @@ done
 
 # ====================== 开始干活 ======================
 log_info "1. 注册 CA Admin"
-enroll_ca_admin "$CA_NAME" "$CA_URL" "$CA_TLS_CERT" "$ORG_HOME"
+enroll_ca_admin "$CA_NAME" "$CA_URL" "$CA_TLS_CERT" "$ORG_HOME" "$ADMIN_PW"
 log_info "2. 注册 Admin 用户"
 register_identity "$CA_NAME" "$CA_TLS_CERT" "${ORG_NAME}admin" "$ADMIN_PW" "admin" "$ORG_HOME"
 enroll_identity_msp "$CA_NAME" "$CA_TLS_CERT" "${ORG_NAME}admin" "$ADMIN_PW" "$ORG_HOME" "$ADMIN_MSP_DIR" "${CA_URL##*:}"

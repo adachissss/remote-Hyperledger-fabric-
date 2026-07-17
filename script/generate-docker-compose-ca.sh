@@ -75,10 +75,11 @@ write_ca_service() {
   local ca_name="$3"
   local host_port="$4"
   local volume_dir="$5"
+  local bootstrap_password="$6"
 
   cat >> "$OUTPUT_FILE" <<EOF
   ${service_name}:
-    image: hyperledger/fabric-ca:latest
+    image: hyperledger/fabric-ca:${FABRIC_CA_IMAGE_TAG}
     container_name: ${container_name}
     ports:
       - "${host_port}:${CA_INTERNAL_PORT}"
@@ -89,13 +90,21 @@ write_ca_service() {
       - FABRIC_CA_SERVER_TLS_ENABLED=true
     volumes:
       - ${volume_dir}:/etc/hyperledger/fabric-ca-server
-    command: sh -c 'fabric-ca-server start -b admin:adminpw --port ${CA_INTERNAL_PORT} --tls.enabled'
+    command: sh -c 'fabric-ca-server start -b admin:${bootstrap_password} --port ${CA_INTERNAL_PORT} --tls.enabled'
     networks:
       - ${FABRIC_DOCKER_NET}
 EOF
 }
 
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
+FABRIC_CA_IMAGE_TAG=$(get_config_value_raw '.network.fabric_ca_version // "latest"')
+NAMESPACE_CONTAINERS=$(get_config_value_raw '.network.namespace_containers // false')
+if [[ "$NAMESPACE_CONTAINERS" == "true" ]]; then
+  CA_CONTAINER_PREFIX="${FABRIC_NET_PREFIX}-"
+else
+  CA_CONTAINER_PREFIX=""
+fi
 mapfile -t PEER_ORGS < <(get_peer_org_names)
 ORDERER_CONFIG=$(load_orderer_org_config)
 ORDERER_CA_NAME=$(printf '%s' "$ORDERER_CONFIG" | "$YQ_BIN" -r '.ca_name')
@@ -107,6 +116,7 @@ generate_ca_server_config() {
   local ca_dir="$1"
   local ca_name="$2"
   local ca_port="$3"
+  local bootstrap_password="$4"
 
   mkdir -p "$ca_dir"
 
@@ -146,7 +156,7 @@ registry:
   maxenrollments: -1
   identities:
      - name: admin
-       pass: adminpw
+       pass: ${bootstrap_password}
        type: client
        affiliation: ""
        attrs:
@@ -251,34 +261,40 @@ for org in "${PEER_ORGS[@]}"; do
   CA_NAME=$(printf '%s' "$ORG_CONFIG" | "$YQ_BIN" -r '.ca_name')
   CA_URL=$(printf '%s' "$ORG_CONFIG" | "$YQ_BIN" -r '.ca_url // empty')
   CA_PORT_OVERRIDE=$(printf '%s' "$ORG_CONFIG" | "$YQ_BIN" -r '.ca_port // empty')
+  ADMIN_PASSWORD=$(printf '%s' "$ORG_CONFIG" | "$YQ_BIN" -r '.admin_password // "adminpw"')
   HOST_PORT=$(get_peer_ca_host_port "$org" "$ORG_INDEX" "$CA_PORT_OVERRIDE" "$CA_URL")
 
   generate_ca_server_config \
     "${PROJECT_ROOT}/organizations/fabric-ca/${org}" \
     "$CA_NAME" \
-    "$CA_INTERNAL_PORT"
+    "$CA_INTERNAL_PORT" \
+    "$ADMIN_PASSWORD"
 
   write_ca_service \
-    "ca_${org}" \
-    "ca_${org}" \
+    "${CA_CONTAINER_PREFIX}ca_${org}" \
+    "${CA_CONTAINER_PREFIX}ca_${org}" \
     "$CA_NAME" \
     "$HOST_PORT" \
-    "../organizations/fabric-ca/${org}"
+    "../organizations/fabric-ca/${org}" \
+    "$ADMIN_PASSWORD"
 done
 
 ORDERER_CA_HOST_PORT=$(get_orderer_ca_host_port "$ORDERER_CA_PORT_OVERRIDE" "$ORDERER_CA_URL" "${#PEER_ORGS[@]}")
+ORDERER_ADMIN_PASSWORD=$(printf '%s' "$ORDERER_CONFIG" | "$YQ_BIN" -r '.admin_password // "adminpw"')
 
 generate_ca_server_config \
   "${PROJECT_ROOT}/organizations/fabric-ca/ca-orderer" \
   "$ORDERER_CA_NAME" \
-  "$CA_INTERNAL_PORT"
+  "$CA_INTERNAL_PORT" \
+  "$ORDERER_ADMIN_PASSWORD"
 
 write_ca_service \
-  "ca_orderer" \
-  "ca_orderer" \
+  "${CA_CONTAINER_PREFIX}ca_orderer" \
+  "${CA_CONTAINER_PREFIX}ca_orderer" \
   "$ORDERER_CA_NAME" \
   "$ORDERER_CA_HOST_PORT" \
-  "../organizations/fabric-ca/ca-orderer"
+  "../organizations/fabric-ca/ca-orderer" \
+  "$ORDERER_ADMIN_PASSWORD"
 
 cat >> "$OUTPUT_FILE" <<EOF
 networks:

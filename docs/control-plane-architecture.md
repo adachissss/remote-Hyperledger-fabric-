@@ -134,6 +134,14 @@ interface NetworkDriver {
 - 锁按 `networkId` 隔离，不同网络的作业可以并行；
 - Fabric/CA 版本属于网络定义，不使用平台级单一硬编码版本。
 
+当前 managed network 创建链路已经实现基础拓扑参数化：Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道和通道成员均由共享 schema 校验后写入独立工作区。端口规划器为 Orderer gRPC/admin/operations、CA、Peer gRPC/chaincode/metrics 分配完整区间，并同时排除注册表保留端口和宿主机监听端口。
+
+Docker network 只隔离容器内部 DNS 和数据面，不能单独解决多网络并存问题。平台还为每个网络派生唯一 Compose project、容器名和 volume namespace，并对 Docker network、Compose project 和宿主机发布端口建立注册表唯一约束。宿主机 Fabric CLI 通过网络专属节点域名和分段 `/etc/hosts` 映射访问容器，容器之间通过各自 Docker network DNS 通信。
+
+托管工作区生成后不会自动启动网络。用户既可以从 Operations 页面创建 `up` 作业，也可以进入 `runtime/networks/{networkId}` 继续执行原 `./network.sh up`，两种入口共享同一配置和脚本。
+
+PDC 不属于基础网络拓扑：集合定义随链码生命周期部署，公共区块只能看到私有读写集哈希。后续拓扑 schema 将以可选能力逐步加入 CouchDB、Orderer 共识类型、BatchSize/BatchTimeout 和节点级启动参数，避免第一版把未被脚本稳定支持的字段伪装成可用能力。
+
 当前脚本仍把仓库根目录当作唯一运行目录。进入多 managed network 阶段前，需要把“平台源码目录”和“网络实例工作区”分离，所有生成路径必须由 driver 显式传入。`network.sh`、现有 Docker Compose 与链码脚本继续作为可独立使用的命令行入口；控制平面只在 driver 中增加参数校验、作业编排和日志适配，不替换这些脚本，也不要求必须通过网页启动网络。
 
 ### 6.2 Topology and Node Status
@@ -234,6 +242,7 @@ Chaincode Inventory 使用各组织 Peer 的管理员上下文查询 `queryinsta
 GET    /api/v1/system/health
 GET    /api/v1/networks
 POST   /api/v1/networks/import
+POST   /api/v1/networks
 GET    /api/v1/networks/:id/config
 GET    /api/v1/networks/:id/topology
 GET    /api/v1/networks/:id/nodes

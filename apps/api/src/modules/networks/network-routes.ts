@@ -1,5 +1,6 @@
 import {
   CreateNetworkActionRequestSchema,
+  CreateManagedNetworkRequestSchema,
   ImportNetworkRequestSchema,
   NetworkIdSchema,
   NetworkListResponseSchema,
@@ -12,6 +13,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { JobServiceError, type JobService } from '../jobs/job-service.js';
 import { NetworkImportError, type NetworkImportService } from './network-import-service.js';
 import type { NetworkObservatoryService } from './network-observatory-service.js';
+import { ManagedNetworkError, type ManagedNetworkService } from './managed-network-service.js';
 import type { NetworkRegistry } from './network-registry.js';
 
 type NetworkRouteOptions = {
@@ -19,6 +21,7 @@ type NetworkRouteOptions = {
   networkImportService: NetworkImportService;
   networkObservatoryService: NetworkObservatoryService;
   jobService: JobService;
+  managedNetworkService: ManagedNetworkService;
 };
 
 export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = async (
@@ -28,6 +31,22 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
   app.get('/', async (): Promise<NetworkListResponse> => {
     const items = await options.networkRegistry.list();
     return NetworkListResponseSchema.parse({ items, total: items.length });
+  });
+
+  app.post('/', async (request, reply) => {
+    const parsed = CreateManagedNetworkRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'invalid_managed_network',
+        message: 'The managed network request is invalid.',
+        issues: parsed.error.issues,
+      });
+    }
+    try {
+      return reply.code(201).send(await options.managedNetworkService.create(parsed.data));
+    } catch (error) {
+      return sendNetworkError(error, reply);
+    }
   });
 
   app.post('/import', async (request, reply) => {
@@ -163,6 +182,12 @@ function sendNetworkError(error: unknown, reply: FastifyReply) {
     });
   }
   if (error instanceof JobServiceError) {
+    return reply.code(error.statusCode).send({
+      error: error.code,
+      message: error.message,
+    });
+  }
+  if (error instanceof ManagedNetworkError) {
     return reply.code(error.statusCode).send({
       error: error.code,
       message: error.message,

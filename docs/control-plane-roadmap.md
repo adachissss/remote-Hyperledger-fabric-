@@ -20,7 +20,7 @@
 
 - [x] SQLite 持久化空网络注册表，不自动注入默认实例；
 - [x] 从管理员允许的服务端工作区导入多个网络；
-- [ ] 创建由平台管理的网络；
+- [x] 创建由平台管理的网络；
 - [x] 网络配置、拓扑和节点 API/路由以 `networkId` 为第一维；
 - [x] 解析每个网络脱敏后的配置；
 - [ ] 封装 `export-network-info.sh`；
@@ -37,7 +37,11 @@
 目标：将网络生命周期变成可观察的异步作业。
 
 - [x] Job/JobStep/JobEvent 数据模型与 SQLite 持久化；
-- [ ] managed network 独立工作区、Compose project、Docker network 和端口冲突检查；
+- [x] managed network 独立工作区、Compose project、Docker network 和端口冲突检查；
+- [x] 自定义 Peer 组织数、每组织 Peer 数、Orderer 数、多通道和通道成员；
+- [x] Web 中文创建向导、自动端口规划和指定起始端口；
+- [ ] 可选 CouchDB 状态数据库及 CouchDB 节点拓扑；
+- [ ] Orderer 共识类型、BatchSize/BatchTimeout 和节点启动参数；
 - [x] 按注册工作区、配置路径和 Compose project 调用原脚本，并保留原脚本命令入口；
 - [x] 无 Shell 拼接的子进程执行器与基础日志脱敏；
 - [x] SSE 实时日志与历史事件重放；

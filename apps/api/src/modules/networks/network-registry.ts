@@ -26,15 +26,36 @@ type NetworkRow = {
 
 export interface NetworkRegistry {
   list(): Promise<NetworkSummary[]>;
+  listRegistered(): Promise<RegisteredNetwork[]>;
+  listReservedPorts(): Promise<number[]>;
   get(id: string): Promise<RegisteredNetwork | null>;
-  create(network: RegisteredNetwork): Promise<NetworkSummary>;
+  create(network: RegisteredNetwork, reservedPorts?: number[]): Promise<NetworkSummary>;
   close(): Promise<void>;
+}
+
+export class NetworkPortConflictError extends Error {
+  constructor(readonly port: number) {
+    super(`Port ${port} is already reserved by another network.`);
+    this.name = 'NetworkPortConflictError';
+  }
 }
 
 export class NetworkRegistryConflictError extends Error {
   constructor(readonly networkId: string) {
     super(`A network with id "${networkId}" is already registered.`);
     this.name = 'NetworkRegistryConflictError';
+  }
+}
+
+export class NetworkNamespaceConflictError extends Error {
+  constructor(
+    readonly namespace: 'docker_network' | 'compose_project',
+    readonly value: string,
+  ) {
+    super(
+      `${namespace === 'docker_network' ? 'Docker network' : 'Compose project'} "${value}" is already registered.`,
+    );
+    this.name = 'NetworkNamespaceConflictError';
   }
 }
 
@@ -48,6 +69,7 @@ class SqliteNetworkRegistry implements NetworkRegistry {
 
     this.#database = new Database(databasePath);
     this.#database.pragma('journal_mode = WAL');
+    this.#database.pragma('foreign_keys = ON');
     this.#database.exec(`
       CREATE TABLE IF NOT EXISTS networks (
         id TEXT PRIMARY KEY,
@@ -66,15 +88,36 @@ class SqliteNetworkRegistry implements NetworkRegistry {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS network_ports (
+        network_id TEXT NOT NULL REFERENCES networks(id) ON DELETE CASCADE,
+        port INTEGER NOT NULL UNIQUE CHECK(port BETWEEN 1 AND 65535),
+        PRIMARY KEY(network_id, port)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS networks_docker_network_unique
+        ON networks(docker_network);
+      CREATE UNIQUE INDEX IF NOT EXISTS networks_compose_project_unique
+        ON networks(compose_project);
     `);
   }
 
   async list(): Promise<NetworkSummary[]> {
+    return (await this.listRegistered()).map(toNetworkSummary);
+  }
+
+  async listRegistered(): Promise<RegisteredNetwork[]> {
     const rows = this.#database
       .prepare('SELECT * FROM networks ORDER BY display_name COLLATE NOCASE, id')
       .all() as NetworkRow[];
+    return rows.map(toRegisteredNetwork);
+  }
 
-    return rows.map(toNetworkSummary);
+  async listReservedPorts(): Promise<number[]> {
+    const rows = this.#database.prepare('SELECT port FROM network_ports ORDER BY port').all() as Array<{
+      port: number;
+    }>;
+    return rows.map((row) => row.port);
   }
 
   async get(id: string): Promise<RegisteredNetwork | null> {
@@ -84,8 +127,8 @@ class SqliteNetworkRegistry implements NetworkRegistry {
     return row ? toRegisteredNetwork(row) : null;
   }
 
-  async create(network: RegisteredNetwork): Promise<NetworkSummary> {
-    try {
+  async create(network: RegisteredNetwork, reservedPorts: number[] = []): Promise<NetworkSummary> {
+    const create = this.#database.transaction(() => {
       this.#database
         .prepare(`
           INSERT INTO networks (
@@ -99,9 +142,35 @@ class SqliteNetworkRegistry implements NetworkRegistry {
           )
         `)
         .run(network);
+      const insertPort = this.#database.prepare(
+        'INSERT INTO network_ports (network_id, port) VALUES (?, ?)',
+      );
+      for (const port of new Set(reservedPorts)) insertPort.run(network.id, port);
+    });
+
+    try {
+      create();
     } catch (error) {
       if (isSqliteConstraint(error)) {
-        throw new NetworkRegistryConflictError(network.id);
+        const idConflict = this.#database.prepare('SELECT 1 FROM networks WHERE id = ?').get(network.id);
+        if (idConflict) throw new NetworkRegistryConflictError(network.id);
+        const dockerNetworkConflict = this.#database
+          .prepare('SELECT 1 FROM networks WHERE docker_network = ?')
+          .get(network.dockerNetwork);
+        if (dockerNetworkConflict) {
+          throw new NetworkNamespaceConflictError('docker_network', network.dockerNetwork);
+        }
+        const composeProjectConflict = this.#database
+          .prepare('SELECT 1 FROM networks WHERE compose_project = ?')
+          .get(network.composeProject);
+        if (composeProjectConflict) {
+          throw new NetworkNamespaceConflictError('compose_project', network.composeProject);
+        }
+        const conflictingPort = reservedPorts.find((port) =>
+          this.#database.prepare('SELECT 1 FROM network_ports WHERE port = ?').get(port),
+        );
+        if (conflictingPort !== undefined) throw new NetworkPortConflictError(conflictingPort);
+        throw error;
       }
       throw error;
     }

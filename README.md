@@ -44,13 +44,28 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 
 当前 Control Plane 已实现：
 
+- 创建或导入多个异名 Fabric 网络，并为托管网络自定义 Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道及通道成员；
+- 托管网络独立工作区、Docker network、Compose project、容器/卷命名空间和宿主机端口规划；
 - 多网络注册、配置、拓扑和节点运行状态查看；
 - `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
 - 动态通道发现、账本高度、区块分页和 Fabric protobuf 明文解析；
 - 已安装包与已提交链码清单、通用部署作业以及 evaluate/submit 执行台；
 - 默认简体中文的亮色 Web 控制台。
 
+在“网络”页面点击“创建网络”即可配置基础拓扑。端口可以由平台自动寻找连续可用区间，也可以指定起始端口；创建时会同时检查注册表保留端口和宿主机监听端口。仅使用不同 Docker network 不能完整避免冲突，因此平台还会保证 Compose project、容器名称、volume namespace 和宿主机发布端口互不复用。
+
+托管网络默认生成到 `runtime/networks/<network-id>`。网页创建完成后仍可进入对应工作区直接使用原脚本：
+
+```bash
+cd runtime/networks/<network-id>
+./network.sh up
+```
+
+网页“运维”页面调用的也是该工作区中的 `network.sh`，脚本式入口不会被替换。创建网络只生成配置和工作区，不会自动启动容器。
+
 链码部署从已注册网络工作区内的相对源码路径读取，不预置示例链码。部署继续调用工作区原有的 `upgrade_chaincode.sh`，日志、取消、超时和网络互斥沿用统一作业系统；命令行入口不受影响。当前部署过程记录为单个脚本步骤，后续再拆分为可独立重试的 package/install/approve/readiness/commit 结构化步骤。
+
+PDC 属于链码 collections 配置，而不是网络拓扑字段；当前继续在链码部署时按网络工作区内的 collections JSON 配置。CouchDB、Orderer 共识类型、区块大小/出块超时和更多节点启动参数将在后续拓扑版本中逐步开放。
 
 Caliper 仍暂缓。
 
@@ -92,7 +107,7 @@ cp config/orgs.example.yaml config/orgs.yaml
 ./network.sh down     # 删除容器卷、组织材料和通道文件
 ```
 
-`up` 会依次生成 CA、组织证书、Compose、通道配置和 Peer `core.yaml`，再启动节点并加入 `mychannel`。
+`up` 会依次生成 CA、组织证书、Compose、通道配置和 Peer `core.yaml`，再启动节点并将配置中的 Orderer 与 Peer 加入各自通道。
 
 ## 链码
 

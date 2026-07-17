@@ -8,11 +8,14 @@ import type {
 } from '@plus-fabric/shared';
 
 import {
+  collectPublishedHostPorts,
   readFabricComposeConfig,
   type FabricComposeConfigSnapshot,
 } from './fabric-compose-config.js';
 import type { RegisteredNetwork } from './network-driver.js';
 import {
+  NetworkNamespaceConflictError,
+  NetworkPortConflictError,
   NetworkRegistryConflictError,
   type NetworkRegistry,
 } from './network-registry.js';
@@ -32,6 +35,7 @@ export class NetworkImportService {
   constructor(
     private readonly registry: NetworkRegistry,
     private readonly allowedRoots: string[],
+    private readonly managedNetworkRoot: string | null = null,
   ) {}
 
   async import(request: ImportNetworkRequest): Promise<NetworkSummary> {
@@ -77,10 +81,16 @@ export class NetworkImportService {
     };
 
     try {
-      return await this.registry.create(network);
+      return await this.registry.create(network, collectPublishedHostPorts(snapshot));
     } catch (error) {
       if (error instanceof NetworkRegistryConflictError) {
         throw new NetworkImportError('network_exists', error.message, 409);
+      }
+      if (error instanceof NetworkNamespaceConflictError) {
+        throw new NetworkImportError('network_namespace_conflict', error.message, 409);
+      }
+      if (error instanceof NetworkPortConflictError) {
+        throw new NetworkImportError('network_port_conflict', error.message, 409);
       }
       throw error;
     }
@@ -101,7 +111,10 @@ export class NetworkImportService {
     }
 
     try {
-      const workspaceRoot = this.resolveWorkspaceRoot(network.workspaceRoot);
+      const workspaceRoot =
+        network.managementMode === 'managed'
+          ? this.resolveManagedWorkspaceRoot(network.workspaceRoot)
+          : this.resolveWorkspaceRoot(network.workspaceRoot);
       const relativeConfigPath = path.relative(workspaceRoot, network.configPath);
       const configPath = this.resolveConfigPath(workspaceRoot, relativeConfigPath);
       return readFabricComposeConfig(network.id, configPath);
@@ -154,6 +167,30 @@ export class NetworkImportService {
     }
 
     return workspaceRoot;
+  }
+
+  private resolveManagedWorkspaceRoot(requestedRoot: string): string {
+    if (!this.managedNetworkRoot) {
+      throw new NetworkImportError(
+        'network_config_unavailable',
+        'The managed network root is not configured.',
+        503,
+      );
+    }
+    try {
+      const managedRoot = realpathSync(this.managedNetworkRoot);
+      const workspaceRoot = realpathSync(path.resolve(requestedRoot));
+      if (!statSync(workspaceRoot).isDirectory() || !isWithin(managedRoot, workspaceRoot)) {
+        throw new Error('outside managed root');
+      }
+      return workspaceRoot;
+    } catch {
+      throw new NetworkImportError(
+        'network_config_unavailable',
+        'The managed network workspace is unavailable.',
+        503,
+      );
+    }
   }
 
   private resolveConfigPath(workspaceRoot: string, requestedPath: string): string {

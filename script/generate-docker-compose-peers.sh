@@ -90,6 +90,7 @@ FABRIC_NET_ID=$(get_config_value_raw '.network.id')
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
 FABRIC_NET_PORT=$(get_config_value_raw '.network.network_port__start // 0')
+FABRIC_IMAGE_TAG=$(get_config_value_raw '.network.fabric_version // "latest"')
 
 
 for org in "${PEER_ORGS[@]}"; do
@@ -123,7 +124,7 @@ for org in "${PEER_ORGS[@]}"; do
 
   ${PEER_HOST}:
     container_name: ${PEER_HOST}
-    image: hyperledger/fabric-peer:latest
+    image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG}
     labels:
       service: hyperledger-fabric
     environment:

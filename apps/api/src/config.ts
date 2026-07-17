@@ -16,6 +16,10 @@ const EnvironmentSchema = z.object({
     .string()
     .default(path.join(projectRoot, 'runtime/control-plane/control-plane.sqlite')),
   CONTROL_PLANE_ALLOWED_NETWORK_ROOTS: z.string().default(''),
+  CONTROL_PLANE_MANAGED_NETWORK_ROOT: z
+    .string()
+    .default(path.join(projectRoot, 'runtime/networks')),
+  CONTROL_PLANE_DRIVER_TEMPLATE_ROOT: z.string().default(projectRoot),
 });
 
 export type AppConfig = {
@@ -25,6 +29,8 @@ export type AppConfig = {
   corsOrigins: string[];
   databasePath: string;
   allowedNetworkRoots: string[];
+  managedNetworkRoot: string;
+  driverTemplateRoot: string;
 };
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -45,5 +51,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       .map((root) => root.trim())
       .filter(Boolean)
       .map((root) => path.resolve(root)),
+    managedNetworkRoot: path.resolve(parsed.CONTROL_PLANE_MANAGED_NETWORK_ROOT),
+    driverTemplateRoot: path.resolve(parsed.CONTROL_PLANE_DRIVER_TEMPLATE_ROOT),
   };
 }

@@ -16,87 +16,81 @@ SNAPSHOT_ROOT_DIR="/var/hyperledger/production/snapshots"
 
 source "${PROJECT_ROOT}/script/lib/fabric-ca-lib.sh"
 
-# ========================================
-# 网络前缀获取
-# ========================================
-FABRIC_NET_PREFIX=$(yq -r '.network.env_prefix' "$CONFIG_FILE")
+FABRIC_NET_ID=$(get_config_value_raw '.network.id')
+FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
+FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
 
-# ========================================
-# 复用 joinChannel 中的获取 peer 逻辑
-# ========================================
-get_all_peers() {
-    docker ps --format '{{.Names}}' \
-        | grep -E "${FABRIC_NET_PREFIX}-peer[0-9]+\.org[0-9]+\.example\.com" \
-        | sort \
-        | while read -r container; do
-            addr=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_ADDRESS"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container")
-            msp=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_LOCALMSPID"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container")
+get_peer_port() {
+    local org_name="$1" peer_index="$2" field="$3" default_offset="$4"
+    local configured
+    configured=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org_name}\") | .peers[${peer_index}].${field} // empty")
+    if [[ -n "$configured" && "$configured" != "null" ]]; then
+        echo "$configured"
+        return
+    fi
 
-            [[ -n "$addr" && -n "$msp" ]] || continue
-
-            printf '%s|%s|%s\n' "$container" "$addr" "$msp"
-        done
+    local org_index
+    org_index=$(get_peer_org_index "$org_name")
+    echo $((7000 + org_index * 100 + peer_index * 10 + default_offset))
 }
 
 # ========================================
 # 主函数
 # ========================================
 main() {
-    log_info "开始根据正在运行的 peer 自动生成 core.yaml ..."
+    log_info "开始根据网络配置生成 peer core.yaml ..."
 
-    mapfile -t peers < <(get_all_peers)
+    local generated=0
+    local org org_config msp domain peer_count peer_host peer_path
+    local peer_port chaincode_port ops_port bootstrap_port gossip bootstrap output_file
+    while IFS= read -r org; do
+        [[ -n "$org" ]] || continue
+        org_config=$(load_peer_org_config "$org")
+        msp=$(printf '%s' "$org_config" | "$YQ_BIN" -r '.mspid')
+        domain=$(printf '%s' "$org_config" | "$YQ_BIN" -r '.domain')
+        peer_count=$(printf '%s' "$org_config" | "$YQ_BIN" -r '.peer_count')
+        bootstrap_port=$(get_peer_port "$org" 0 peer_port 51)
 
-    if [[ ${#peers[@]} -eq 0 ]]; then
-        log_error "没有发现正在运行的 peer 容器！无法生成 core.yaml"
-        exit 1
-    fi
+        for ((peer_index=0; peer_index<peer_count; peer_index++)); do
+            peer_host="${FABRIC_NET_PREFIX}-peer${peer_index}.${domain}"
+            peer_path="${ROOT_DIR}/${FABRIC_NET_PREFIX}-${domain}/peers/${peer_host}"
+            [[ -d "$peer_path" ]] || {
+                log_error "未找到 peer 目录: $peer_path"
+                exit 1
+            }
 
-    for peer_line in "${peers[@]}"; do
-        IFS='|' read -r peer_host address msp <<< "$peer_line"
+            peer_port=$(get_peer_port "$org" "$peer_index" peer_port 51)
+            chaincode_port=$(get_peer_port "$org" "$peer_index" chaincode_port 52)
+            ops_port=$(get_peer_port "$org" "$peer_index" metrics_port 55)
+            gossip="${peer_host}:${peer_port}"
+            bootstrap="${FABRIC_NET_PREFIX}-peer0.${domain}:${bootstrap_port}"
+            output_file="${peer_path}/core.yaml"
 
-        log_info "处理 peer: $peer_host  地址: $address  MSP: $msp"
+            log_info "处理 peer: $peer_host  地址: $gossip  MSP: $msp"
 
-        domain="${peer_host#*.}"
-        peer_path="${ROOT_DIR}/${FABRIC_NET_PREFIX}-${domain}/peers/${peer_host}"
+            sed -e "s#{{PEER_ID}}#${peer_host}#g" \
+                -e "s#{{PEER_PORT}}#${peer_port}#g" \
+                -e "s#{{CHAINCODE_PORT}}#${chaincode_port}#g" \
+                -e "s#{{OPS_PORT}}#${ops_port}#g" \
+                -e "s#{{PEER_ENDPOINT}}#${gossip}#g" \
+                -e "s#{{PEER_EXTERNAL}}#${gossip}#g" \
+                -e "s#{{GOSSIP_BOOTSTRAP}}#${bootstrap}#g" \
+                -e "s#{{MSP_ID}}#${msp}#g" \
+                -e "s#{{MSP_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/msp#g" \
+                -e "s#{{TLS_CERT_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/server.crt#g" \
+                -e "s#{{TLS_KEY_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/server.key#g" \
+                -e "s#{{TLS_CA_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/ca.crt#g" \
+                -e "s#{{NETWORK_ID}}#${FABRIC_NET_ID}#g" \
+                -e "s#{{DOCKER_NETWORK}}#${FABRIC_DOCKER_NET}#g" \
+                -e "s#{{SNAPSHOT_ROOT_DIR}}#${SNAPSHOT_ROOT_DIR}#g" \
+                "$TEMPLATE_FILE" > "$output_file"
+            generated=$((generated + 1))
+        done
+    done < <(get_peer_org_names)
 
-        if [[ ! -d "$peer_path" ]]; then
-            log_debug "未找到路径: $peer_path ，跳过"
-            continue
-        fi
+    [[ "$generated" -gt 0 ]] || { log_error "网络配置中没有 peer 节点"; exit 1; }
 
-        # 端口从容器里的 address 获取
-        peer_port="${address##*:}"
-        chaincode_port=$(( peer_port + 1 ))
-
-        peer_number="${peer_host%%.*}"        # peer0
-        peer_number="${peer_number//[!0-9]/}" # 变成数字：0
-        ops_port=$(( 9144 + peer_number ))
-
-        gossip="${peer_host}:${peer_port}"
-        output_file="${peer_path}/core.yaml"
-
-        # log_debug "生成 core.yaml -> $output_file"
-
-        sed -e "s#{{PEER_ID}}#${peer_host}#g" \
-            -e "s#{{PEER_PORT}}#${peer_port}#g" \
-            -e "s#{{CHAINCODE_PORT}}#${chaincode_port}#g" \
-            -e "s#{{OPS_PORT}}#${ops_port}#g" \
-            -e "s#{{PEER_ENDPOINT}}#${gossip}#g" \
-            -e "s#{{PEER_EXTERNAL}}#${gossip}#g" \
-            -e "s#{{GOSSIP_BOOTSTRAP}}#${gossip}#g" \
-            -e "s#{{MSP_ID}}#${msp}#g" \
-            -e "s#{{MSP_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/msp#g" \
-            -e "s#{{TLS_CERT_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/server.crt#g" \
-            -e "s#{{TLS_KEY_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/server.key#g" \
-            -e "s#{{TLS_CA_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/ca.crt#g" \
-            -e "s#{{NETWORK_ID}}#fabricnet#g" \
-            -e "s#{{SNAPSHOT_ROOT_DIR}}#${SNAPSHOT_ROOT_DIR}#g" \
-            "$TEMPLATE_FILE" > "$output_file"
-
-        # log_success "生成成功：$output_file"
-    done
-
-    log_success "core.yaml 生成完毕！"
+    log_success "core.yaml 生成完毕，共生成 $generated 个节点配置"
 }
 
 # ========================================

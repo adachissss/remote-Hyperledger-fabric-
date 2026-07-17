@@ -22,6 +22,16 @@ import {
   type ProcessRunner,
 } from './modules/jobs/process-runner.js';
 import { DockerCliRuntime, type DockerRuntime } from './modules/networks/docker-runtime.js';
+import {
+  DockerCliManagedNamespaceProbe,
+  ManagedNetworkService,
+  type ManagedNamespaceProbe,
+} from './modules/networks/managed-network-service.js';
+import {
+  ManagedPortPlanner,
+  TcpHostPortProbe,
+  type HostPortProbe,
+} from './modules/networks/managed-port-planner.js';
 import { NetworkImportService } from './modules/networks/network-import-service.js';
 import { NetworkObservatoryService } from './modules/networks/network-observatory-service.js';
 import { createNetworkRegistry } from './modules/networks/network-registry.js';
@@ -35,6 +45,8 @@ export type AppDependencies = {
   processRunner?: ProcessRunner;
   ledgerRuntime?: FabricLedgerRuntime;
   chaincodeRuntime?: FabricChaincodeRuntime;
+  hostPortProbe?: HostPortProbe;
+  managedNamespaceProbe?: ManagedNamespaceProbe;
 };
 
 export async function buildApp(
@@ -57,6 +69,14 @@ export async function buildApp(
   const networkImportService = new NetworkImportService(
     networkRegistry,
     config.allowedNetworkRoots,
+    config.managedNetworkRoot,
+  );
+  const managedNetworkService = new ManagedNetworkService(
+    networkRegistry,
+    config.managedNetworkRoot,
+    config.driverTemplateRoot,
+    new ManagedPortPlanner(dependencies.hostPortProbe ?? new TcpHostPortProbe()),
+    dependencies.managedNamespaceProbe ?? new DockerCliManagedNamespaceProbe(),
   );
   const networkObservatoryService = new NetworkObservatoryService(
     networkImportService,
@@ -105,6 +125,7 @@ export async function buildApp(
     networkImportService,
     networkObservatoryService,
     jobService,
+    managedNetworkService,
   });
 
   app.setNotFoundHandler(async (_request, reply) => {

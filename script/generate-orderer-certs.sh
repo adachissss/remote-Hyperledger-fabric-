@@ -57,7 +57,7 @@ done
 
 # ====================== 开始干活 ======================
 debug "1. 注册 Orderer CA Admin"
-enroll_ca_admin "$CA_NAME" "$CA_URL" "$CA_TLS_CERT" "$ORDERER_HOME"
+enroll_ca_admin "$CA_NAME" "$CA_URL" "$CA_TLS_CERT" "$ORDERER_HOME" "$ADMIN_PW"
 
 debug "2. 注册 Orderer Admin 用户"
 register_identity "$CA_NAME" "$CA_TLS_CERT" "Ordereradmin" "$ADMIN_PW" "admin" "$ORDERER_HOME"

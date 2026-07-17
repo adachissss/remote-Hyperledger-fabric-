@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 
 import { getNetworks, importNetwork } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
+import { ManagedNetworkDialog } from './ManagedNetworkDialog';
 import {
   getApiErrorMessage,
   getManagementModeLabel,
@@ -16,6 +17,8 @@ import {
 export function NetworksPage() {
   const queryClient = useQueryClient();
   const [importOpen, setImportOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
   const importDialogRef = useRef<HTMLElement>(null);
   const [form, setForm] = useState({
@@ -66,7 +69,9 @@ export function NetworksPage() {
     };
   }, [importOpen]);
 
-  const closeImportDialog = () => setImportOpen(false);
+  const closeImportDialog = () => {
+    if (!importMutation.isPending) setImportOpen(false);
+  };
 
   const trapDialogFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
@@ -129,7 +134,12 @@ export function NetworksPage() {
           >
             <ArrowDownToLine size={16} /> 导入网络
           </button>
-          <button className="primary-action" type="button" disabled title="后续阶段开放">
+          <button
+            ref={createButtonRef}
+            className="primary-action"
+            type="button"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus size={16} /> 创建网络
           </button>
         </div>
@@ -172,7 +182,7 @@ export function NetworksPage() {
           <div className="network-table-empty">
             <Boxes size={30} strokeWidth={1.35} />
             <h3>暂无网络定义</h3>
-            <p>导入已有工作区以添加第一个网络。</p>
+            <p>创建托管网络，或导入已有 Fabric 工作区。</p>
           </div>
         ) : (
           <div className="network-list" role="list">
@@ -223,6 +233,17 @@ export function NetworksPage() {
         )}
       </Panel>
 
+      {createOpen ? (
+        <ManagedNetworkDialog
+          returnFocusRef={createButtonRef}
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => {
+            await queryClient.invalidateQueries({ queryKey: ['networks'] });
+            setCreateOpen(false);
+          }}
+        />
+      ) : null}
+
       {importOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeImportDialog}>
           <section
@@ -243,6 +264,7 @@ export function NetworksPage() {
                 className="icon-button"
                 type="button"
                 aria-label="关闭导入对话框"
+                disabled={importMutation.isPending}
                 onClick={closeImportDialog}
               >
                 <X size={18} />
@@ -344,6 +366,7 @@ export function NetworksPage() {
                 <button
                   className="secondary-action"
                   type="button"
+                  disabled={importMutation.isPending}
                   onClick={closeImportDialog}
                 >
                   取消

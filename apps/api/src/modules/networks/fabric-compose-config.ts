@@ -50,6 +50,7 @@ const RawFabricComposeConfigSchema = z.object({
     name: z.string().min(1),
     domain: z.string().min(1),
     env_prefix: z.string().min(1).optional(),
+    namespace_containers: z.boolean().default(false),
     network_port__start: z.number().int().nonnegative().default(0),
     tls_enabled: z.boolean().default(true),
   }),
@@ -77,6 +78,16 @@ export type FabricComposeConfigSnapshot = {
   ordererDomain: string;
 };
 
+export function collectPublishedHostPorts(snapshot: FabricComposeConfigSnapshot): number[] {
+  return [
+    ...new Set(
+      snapshot.topology.nodes.flatMap((node) =>
+        node.endpoints.map((endpoint) => endpoint.port),
+      ),
+    ),
+  ].sort((left, right) => left - right);
+}
+
 export function readFabricComposeConfig(
   networkId: string,
   configPath: string,
@@ -85,6 +96,7 @@ export function readFabricComposeConfig(
   const config = RawFabricComposeConfigSchema.parse(rawDocument);
   const tlsProtocol = config.network.tls_enabled ? ('grpcs' as const) : ('grpc' as const);
   const envPrefix = config.network.env_prefix ?? config.network.name;
+  const containerPrefix = config.network.namespace_containers ? `${envPrefix}-` : '';
   const ordererMspId = config.ordererOrg.mspid ?? 'OrdererMSP';
   const ordererDomain = config.ordererOrg.domain ?? config.network.domain;
   const ordererOrganizationId = 'orderer-org';
@@ -184,7 +196,7 @@ export function readFabricComposeConfig(
       organizationId,
       organizationName: organization.name,
       mspId: organization.mspid,
-      containerName: `ca_${organization.name}`,
+      containerName: `${containerPrefix}ca_${organization.name}`,
       caName: organization.ca_name,
       caUrl: organization.ca_url,
       hostPort:
@@ -211,7 +223,7 @@ export function readFabricComposeConfig(
     organizationId: ordererOrganizationId,
     organizationName: ordererOrganizationName,
     mspId: ordererMspId,
-    containerName: 'ca_orderer',
+    containerName: `${containerPrefix}ca_orderer`,
     caName: config.ordererOrg.ca_name,
     caUrl: config.ordererOrg.ca_url,
     hostPort:

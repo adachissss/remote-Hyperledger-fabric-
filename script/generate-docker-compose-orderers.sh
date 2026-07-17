@@ -12,6 +12,7 @@ fi
 source "${SCRIPT_DIR}/lib/fabric-ca-lib.sh"
 
 OUTPUT_FILE="${PROJECT_ROOT}/docker/docker-compose-orderers.yaml"
+FABRIC_IMAGE_TAG=$(get_config_value_raw '.network.fabric_version // "latest"')
 ORDERER_MSP_BASE="/var/hyperledger/orderer/msp"
 ORDERER_TLS_BASE="/var/hyperledger/orderer/tls"
 ORDERER_DATA_BASE="/var/hyperledger/production/orderer"
@@ -48,7 +49,7 @@ write_orderer_service() {
   cat >> "$OUTPUT_FILE" <<EOF
   ${host}:
     container_name: ${host}
-    image: hyperledger/fabric-orderer:latest
+    image: hyperledger/fabric-orderer:${FABRIC_IMAGE_TAG}
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0

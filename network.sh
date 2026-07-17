@@ -4,8 +4,14 @@ set -euo pipefail
 PROJECT_ROOT=$(pwd)
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
 source "${PROJECT_ROOT}/script/lib/fabric-ca-lib.sh"
-PRIMARY_CHANNEL_NAME=$(get_primary_channel_name)
+mapfile -t CHANNEL_NAMES < <(get_channel_names)
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
+
+[[ ${#CHANNEL_NAMES[@]} -gt 0 ]] || {
+    error "网络配置至少需要一个通道"
+    exit 1
+}
 
 ensure_docker_network() {
     [[ -n "$FABRIC_DOCKER_NET" && "$FABRIC_DOCKER_NET" != "null" ]] || {
@@ -19,6 +25,20 @@ ensure_docker_network() {
         success "Docker 网络创建完成: $FABRIC_DOCKER_NET"
     else
         info "Docker 网络已存在: $FABRIC_DOCKER_NET"
+    fi
+}
+
+fix_generated_ownership() {
+    [[ -d "${PROJECT_ROOT}/organizations" ]] || return 0
+
+    local owner
+    owner="$(id -u):$(id -g)"
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown -R "$owner" "${PROJECT_ROOT}/organizations" || true
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo chown -R "$owner" "${PROJECT_ROOT}/organizations" || true
+    else
+        warn "无法修正 organizations 目录权限：当前用户无 chown 权限且未安装 sudo"
     fi
 }
 
@@ -36,7 +56,7 @@ do_up() {
 
     info "===== 组织目录授权 ====="
     cd "$PROJECT_ROOT"
-    sudo chown -R adachi:adachi organizations/ || true
+    fix_generated_ownership
 
     info "===== 生成 Peer/Orderer 组织证书 ====="
     cd "$PROJECT_ROOT/script"
@@ -63,17 +83,21 @@ do_up() {
     cd "$PROJECT_ROOT/script"
     ./docker-ip-hosts-Mapping.sh
 
-    info "===== 进入 config 执行 osnadmin ($PRIMARY_CHANNEL_NAME) ====="
-    cd "$PROJECT_ROOT/script"
-    ./osnadmin-examples.sh "$PRIMARY_CHANNEL_NAME"
+    for channel_name in "${CHANNEL_NAMES[@]}"; do
+        info "===== Orderer 加入通道 ($channel_name) ====="
+        cd "$PROJECT_ROOT/script"
+        ./osnadmin-examples.sh "$channel_name"
+    done
 
     info "===== peer core ====="
     cd "$PROJECT_ROOT/script"
     ./generate_core_yaml.sh
 
-    cd "$PROJECT_ROOT/script"
-    info "===== 一键加入通道 ($PRIMARY_CHANNEL_NAME) ====="
-    ./joinChannel.sh "$PRIMARY_CHANNEL_NAME"
+    for channel_name in "${CHANNEL_NAMES[@]}"; do
+        cd "$PROJECT_ROOT/script"
+        info "===== Peer 加入通道 ($channel_name) ====="
+        ./joinChannel.sh "$channel_name"
+    done
 
 
 
@@ -144,7 +168,7 @@ do_down() {
 
     info "===== 删除组织证书与通道文件 ====="
     cd "$PROJECT_ROOT"
-    sudo chown -R adachi:adachi organizations/ || true
+    fix_generated_ownership
 
     rm -rf organizations/
     rm -rf channel-artifacts/

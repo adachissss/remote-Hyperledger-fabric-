@@ -2,6 +2,7 @@ import {
   ChaincodeInventoryResponseSchema,
   ContractExecutionRequestSchema,
   ContractExecutionResultSchema,
+  CreateManagedNetworkRequestSchema,
   CreateChaincodeDeploymentRequestSchema,
   HealthResponseSchema,
   ImportNetworkRequestSchema,
@@ -23,6 +24,7 @@ import {
   type ContractExecutionMode,
   type ContractExecutionRequest,
   type ContractExecutionResult,
+  type CreateManagedNetworkRequest,
   type CreateChaincodeDeploymentRequest,
   type ImportNetworkRequest,
   type Job,
@@ -92,6 +94,18 @@ export async function importNetwork(request: ImportNetworkRequest): Promise<Netw
   const payload = ImportNetworkRequestSchema.parse(request);
   return NetworkSummarySchema.parse(
     await requestJson('/api/v1/networks/import', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function createManagedNetwork(
+  request: CreateManagedNetworkRequest,
+): Promise<NetworkSummary> {
+  const payload = CreateManagedNetworkRequestSchema.parse(request);
+  return NetworkSummarySchema.parse(
+    await requestJson('/api/v1/networks', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

@@ -92,7 +92,7 @@ vm:
 
     # 容器主机配置
     hostConfig:
-      NetworkMode: fabric_net
+      NetworkMode: {{DOCKER_NETWORK}}
       Dns: []
       DnsSearch: []
       ExtraHosts: []

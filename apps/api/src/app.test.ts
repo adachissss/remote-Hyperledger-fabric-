@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,6 +37,8 @@ import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-p
 import type { ProcessRunner } from './modules/jobs/process-runner.js';
 import type { FabricLedgerRuntime } from './modules/ledger/fabric-ledger-runtime.js';
 import type { FabricChaincodeRuntime } from './modules/chaincodes/fabric-chaincode-runtime.js';
+import type { HostPortProbe } from './modules/networks/managed-port-planner.js';
+import type { ManagedNamespaceProbe } from './modules/networks/managed-network-service.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -156,6 +166,19 @@ const observableChaincodeRuntime: FabricChaincodeRuntime = {
       responseStatus: 200,
       output: Buffer.from('{"ok":true}'),
     };
+  },
+};
+
+const availableHostPortProbe: HostPortProbe = {
+  async isAvailable() {
+    return true;
+  },
+};
+
+const availableManagedNamespaceProbe: ManagedNamespaceProbe = {
+  async assertAvailable(dockerNetwork, containerNames) {
+    assert.match(dockerNetwork, /^pf-managed-(?:network|race)$/);
+    assert.equal(new Set(containerNames).size, containerNames.length);
   },
 };
 
@@ -340,6 +363,7 @@ channels:
   const config = createTestConfig({
     CONTROL_PLANE_ALLOWED_NETWORK_ROOTS: temporaryRoot,
     CONTROL_PLANE_DATABASE_PATH: path.join(temporaryRoot, 'control-plane.sqlite'),
+    CONTROL_PLANE_MANAGED_NETWORK_ROOT: path.join(temporaryRoot, 'managed-networks'),
   });
 
   try {
@@ -349,6 +373,8 @@ channels:
       processRunner: successfulProcessRunner,
       ledgerRuntime: observableLedgerRuntime,
       chaincodeRuntime: observableChaincodeRuntime,
+      hostPortProbe: availableHostPortProbe,
+      managedNamespaceProbe: availableManagedNamespaceProbe,
     });
     try {
       const importResponse = await app.inject({
@@ -476,11 +502,26 @@ channels:
       });
       assert.equal(duplicateResponse.statusCode, 409);
 
+      const concurrentWorkspaceRoot = path.join(temporaryRoot, 'network-b');
+      mkdirSync(path.join(concurrentWorkspaceRoot, 'config'), { recursive: true });
+      writeFileSync(
+        path.join(concurrentWorkspaceRoot, 'config', 'orgs.yaml'),
+        readFileSync(path.join(configDirectory, 'orgs.yaml'), 'utf8')
+          .replaceAll('network-a', 'network-b')
+          .replace('10054', '11054')
+          .replace('7054', '8054')
+          .replace('port: 7050', 'port: 8050\n      admin_port: 8053\n      operations_port: 10443')
+          .replace(
+            '    peer_count: 1',
+            '    peer_count: 1\n    peers:\n      - name: peer0\n        peer_port: 8051\n        chaincode_port: 8052\n        metrics_port: 8055',
+          )
+          .replace('port: 7051', 'port: 8051'),
+      );
       const concurrentPayload = {
         id: 'network-b',
         displayName: 'Network B',
         driver: 'fabric-compose',
-        workspaceRoot,
+        workspaceRoot: concurrentWorkspaceRoot,
         configPath: 'config/orgs.yaml',
         composeProject: 'network_b',
       };
@@ -495,6 +536,113 @@ channels:
       assert.equal(
         concurrentResponses.find((response) => response.statusCode === 409)?.json().error,
         'network_exists',
+      );
+
+      const namespaceConflictResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks/import',
+        payload: {
+          id: 'network-c',
+          displayName: 'Network C',
+          driver: 'fabric-compose',
+          workspaceRoot,
+          configPath: 'config/orgs.yaml',
+          composeProject: 'network_c',
+        },
+      });
+      assert.equal(namespaceConflictResponse.statusCode, 409);
+      assert.equal(namespaceConflictResponse.json().error, 'network_namespace_conflict');
+
+      const concurrentManagedPayload = {
+        id: 'managed-race',
+        displayName: 'Managed Race',
+        domain: 'managed-race.test',
+        ordererCount: 1,
+        peerOrganizations: [{ name: 'alpha', mspId: 'AlphaMSP', peerCount: 1 }],
+        channels: [{ name: 'race-channel', memberOrganizations: ['alpha'] }],
+        preferredPortStart: 32_000,
+      };
+      const concurrentManagedResponses = await Promise.all([
+        app.inject({ method: 'POST', url: '/api/v1/networks', payload: concurrentManagedPayload }),
+        app.inject({ method: 'POST', url: '/api/v1/networks', payload: concurrentManagedPayload }),
+      ]);
+      assert.deepEqual(
+        concurrentManagedResponses.map((response) => response.statusCode).sort(),
+        [201, 409],
+        concurrentManagedResponses.map((response) => response.body).join('\n'),
+      );
+      assert.equal(
+        concurrentManagedResponses.find((response) => response.statusCode === 409)?.json().error,
+        'network_exists',
+      );
+
+      const managedResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          id: 'managed-network',
+          displayName: 'Managed Network',
+          domain: 'managed.test',
+          ordererCount: 2,
+          peerOrganizations: [
+            { name: 'alpha', mspId: 'AlphaMSP', peerCount: 2 },
+            { name: 'beta', mspId: 'BetaMSP', peerCount: 1 },
+          ],
+          channels: [
+            { name: 'shared-channel', memberOrganizations: ['alpha', 'beta'] },
+            { name: 'alpha-private', memberOrganizations: ['alpha'] },
+          ],
+          preferredPortStart: 30_000,
+          fabricVersion: '3.1.4',
+          fabricCaVersion: '1.5.19',
+        },
+      });
+      assert.equal(managedResponse.statusCode, 201);
+      assert.deepEqual(managedResponse.json(), {
+        id: 'managed-network',
+        displayName: 'Managed Network',
+        driver: 'fabric-compose',
+        managementMode: 'managed',
+        status: 'unknown',
+        fabricVersion: '3.1.4',
+        organizationCount: 2,
+        channelCount: 2,
+        nodeCount: 8,
+        updatedAt: managedResponse.json().updatedAt,
+      });
+      const managedConfigPath = path.join(
+        temporaryRoot,
+        'managed-networks',
+        'managed-network',
+        'config',
+        'orgs.yaml',
+      );
+      const managedConfig = readFileSync(managedConfigPath, 'utf8');
+      assert.match(managedConfig, /namespace_containers: true/);
+      assert.match(managedConfig, /name: shared-channel/);
+      assert.match(managedConfig, /name: alpha-private/);
+      assert.match(managedConfig, /peer_count: 2/);
+      assert.match(managedConfig, /fabric_version: 3\.1\.4/);
+      assert.match(managedConfig, /fabric_ca_version: 1\.5\.19/);
+      assert.equal(
+        readFileSync(
+          path.join(temporaryRoot, 'managed-networks', 'managed-network', '.env'),
+          'utf8',
+        ),
+        'COMPOSE_PROJECT_NAME=pf_managed_network\n',
+      );
+      assert.equal(
+        readFileSync(
+          path.join(temporaryRoot, 'managed-networks', 'managed-network', 'core-template.yaml'),
+          'utf8',
+        ).includes('{{DOCKER_NETWORK}}'),
+        true,
+      );
+      assert.equal(
+        statSync(
+          path.join(temporaryRoot, 'managed-networks', 'managed-network', 'upgrade_chaincode.sh'),
+        ).isFile(),
+        true,
       );
 
       const emptyJobsResponse = await app.inject({
@@ -626,10 +774,10 @@ channels:
         url: '/api/v1/networks',
       });
       assert.equal(persistedResponse.statusCode, 200);
-      assert.equal(persistedResponse.json().total, 2);
+      assert.equal(persistedResponse.json().total, 4);
       assert.deepEqual(
         persistedResponse.json().items.map((network: { id: string }) => network.id).sort(),
-        ['network-a', 'network-b'],
+        ['managed-network', 'managed-race', 'network-a', 'network-b'],
       );
 
       const unavailableNodesResponse = await restartedApp.inject({

@@ -30,30 +30,24 @@ belongs_to_channel_org() {
 # ====================== 获取所有运行中的 Peer ======================
 get_all_peers() {
   log_debug "get_all_peers: 开始获取 peer 列表"
-
-  # 先看看 docker ps 能找到多少容器
-  local all_containers
-  all_containers=$(docker ps --format '{{.Names}}' | grep -E 'peer[0-9]+\..+\.example\.com' | sort || true)
-  log_debug "get_all_peers: docker ps 找到的容器列表:"
-
   local count=0
-  while read -r container; do
-    local addr msp
-    addr=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_ADDRESS"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container" 2>/dev/null || echo "")
-    msp=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_LOCALMSPID"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container" 2>/dev/null || echo "")
-
-
-    if [[ -n "$addr" && -n "$msp" ]]; then
-      if belongs_to_channel_org "$msp"; then
+  local org domain peer_count container addr msp
+  for org in "${CHANNEL_MEMBER_ORGS[@]}"; do
+    [[ -n "$org" ]] || continue
+    domain=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .domain")
+    peer_count=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peer_count")
+    for ((peer_index=0; peer_index<peer_count; peer_index++)); do
+      container="${FABRIC_NET_PREFIX}-peer${peer_index}.${domain}"
+      addr=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_ADDRESS"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container" 2>/dev/null || true)
+      msp=$(docker inspect --format='{{range .Config.Env}}{{if eq (index (split . "=") 0) "CORE_PEER_LOCALMSPID"}}{{index (split . "=") 1}}{{end}}{{end}}' "$container" 2>/dev/null || true)
+      if [[ -n "$addr" && -n "$msp" ]]; then
         printf '%s|%s|%s\n' "$container" "$addr" "$msp"
         ((count++)) || true
       else
-        log_warning "get_all_peers: 跳过容器 $container (MSP $msp 不属于通道 $CHANNEL_NAME)"
+        log_warning "get_all_peers: 跳过未运行或配置不完整的容器 $container"
       fi
-    else
-      log_warning "get_all_peers: 跳过容器 $container (addr为空或msp为空)"
-    fi
-  done <<< "$all_containers"
+    done
+  done
 
   log_debug "get_all_peers: 完成,共找到 $count 个 peer"
 }
