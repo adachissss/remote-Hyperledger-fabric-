@@ -26,6 +26,8 @@ import {
 } from './managed-port-planner.js';
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_FABRIC_VERSION = '2.4.1';
+const DEFAULT_FABRIC_CA_VERSION = '1.5.3';
 
 export interface ManagedNamespaceProbe {
   assertAvailable(dockerNetwork: string, containerNames: string[]): Promise<void>;
@@ -102,6 +104,8 @@ export class ManagedNetworkService {
     const dockerNetwork = `pf-${request.id}`;
     const composeProject = `pf_${request.id.replaceAll('-', '_')}`;
     const envPrefix = `pf-${request.id}`;
+    const fabricVersion = request.fabricVersion ?? DEFAULT_FABRIC_VERSION;
+    const fabricCaVersion = request.fabricCaVersion ?? DEFAULT_FABRIC_CA_VERSION;
     const names = buildManagedNames(request, envPrefix);
     const registeredNamespaceConflict = (await this.registry.listRegistered()).find(
       (network) =>
@@ -132,7 +136,16 @@ export class ManagedNetworkService {
     await this.createWorkspace(
       workspaceRoot,
       stringifyYaml(
-        buildManagedConfig(request, dockerNetwork, composeProject, envPrefix, names, portPlan),
+        buildManagedConfig(
+          request,
+          dockerNetwork,
+          composeProject,
+          envPrefix,
+          names,
+          portPlan,
+          fabricVersion,
+          fabricCaVersion,
+        ),
         { lineWidth: 0 },
       ),
       composeProject,
@@ -160,8 +173,8 @@ export class ManagedNetworkService {
       configPath,
       dockerNetwork,
       composeProject,
-      fabricVersion: request.fabricVersion,
-      fabricCaVersion: request.fabricCaVersion,
+      fabricVersion,
+      fabricCaVersion,
       organizationCount: snapshot.organizationCount,
       channelCount: snapshot.channelCount,
       nodeCount: snapshot.nodeCount,
@@ -332,6 +345,8 @@ function buildManagedConfig(
   envPrefix: string,
   names: ManagedNames,
   ports: ManagedNetworkPortPlan,
+  fabricVersion: string,
+  fabricCaVersion: string,
 ) {
   return {
     network: {
@@ -344,8 +359,9 @@ function buildManagedConfig(
       network_port__start: 0,
       namespace_containers: true,
       compose_project: composeProject,
-      fabric_version: request.fabricVersion ?? 'latest',
-      fabric_ca_version: request.fabricCaVersion ?? 'latest',
+      remove_docker_network_on_down: true,
+      fabric_version: fabricVersion,
+      fabric_ca_version: fabricCaVersion,
     },
     ordererOrg: {
       mspid: 'OrdererMSP',

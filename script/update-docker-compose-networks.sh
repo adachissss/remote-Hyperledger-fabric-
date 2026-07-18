@@ -13,21 +13,12 @@ YQ_BIN="${YQ_BIN:-${PROJECT_ROOT}/bin/yq}"
 DOCKER_CA_FILE="${PROJECT_ROOT}/docker/docker-compose-ca.yaml"
 DOCKER_ORDERERS_FILE="${PROJECT_ROOT}/docker/docker-compose-orderers.yaml"
 
-require_cmd() {
-  local cmd="$1"
-  command -v "$cmd" >/dev/null 2>&1 || {
-    error "错误：需要命令 '$cmd'，但未找到。"
-    exit 1
-  }
-}
-
 require_file() {
   local f="$1"
   [[ -f "$f" ]] || { error "错误：文件不存在 -> $f"; exit 1; }
 }
 
 [[ -x "$YQ_BIN" ]] || { error "错误：需要可执行文件 '$YQ_BIN'，但未找到。"; exit 1; }
-require_cmd docker
 require_file "$CONFIG_FILE"
 require_file "$DOCKER_CA_FILE"
 require_file "$DOCKER_ORDERERS_FILE"
@@ -40,18 +31,9 @@ fi
 
 debug "使用网络名：$FABRIC_DOCKER_NET (来源：$CONFIG_FILE)"
 
-# 如网络不存在则创建
-if ! docker network inspect "$FABRIC_DOCKER_NET" >/dev/null 2>&1; then
-  warn "创建 Docker 网络：$FABRIC_DOCKER_NET"
-  docker network create "$FABRIC_DOCKER_NET"
-else
-  debug "Docker 网络已存在：$FABRIC_DOCKER_NET"
-fi
-
 update_compose_networks() {
   local compose_file="$1"
   debug "更新 networks -> $FABRIC_DOCKER_NET: $compose_file"
-  cp "$compose_file" "${compose_file}.bak"
 
   # 将所有服务的 networks 覆盖为单一网络名数组
   "$YQ_BIN" -i ".services.*.networks = [\"$FABRIC_DOCKER_NET\"]" "$compose_file"
@@ -63,4 +45,4 @@ update_compose_networks() {
 update_compose_networks "$DOCKER_CA_FILE"
 update_compose_networks "$DOCKER_ORDERERS_FILE"
 
-info "完成：已更新 CA 与 Orderer 的 docker-compose 网络为 '$FABRIC_DOCKER_NET'。备份文件在同目录 *.bak。"
+info "完成：已在当前工作区内更新 CA 与 Orderer Compose 网络为 '$FABRIC_DOCKER_NET'。"

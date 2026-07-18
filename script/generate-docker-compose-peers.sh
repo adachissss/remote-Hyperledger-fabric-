@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -z "${PROJECT_ROOT:-}" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
@@ -75,8 +75,6 @@ get_port() {
 }
 
 cat > "$OUTPUT_FILE" <<'EOF'
-version: '3.7'
-
 services:
 EOF
 
@@ -167,7 +165,7 @@ for org in "${PEER_ORGS[@]}"; do
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${FABRIC_DOCKER_NET}
       # 链码配置
       - CORE_CHAINCODE_MODE=net
-      - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:latest
+      - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:${FABRIC_IMAGE_TAG}
       - CORE_CHAINCODE_EXECUTETIMEOUT=180s
       - CORE_CHAINCODE_INSTALLTIMEOUT=180s
       - CORE_CHAINCODE_STARTUPTIMEOUT=180s
@@ -209,6 +207,3 @@ success "   共生成 ${#ALL_VOLUMES[@]} 个 Peer 节点"
 success "   端口分配规则：默认从 ${PORT_BASE_START} 起，按组织步长 ${PORT_ORG_STRIDE}、按 peer 步长 ${PORT_SLOT_STRIDE} 自动推导；也支持在配置中为单个 peer 显式覆盖端口"
 success "   所有 peer 都独立从 orderer 拉取区块"
 echo "=================================================="
-
-warn "同步 CA/Orderer 的 docker-compose networks 字段..."
-"${SCRIPT_DIR}/update-docker-compose-networks.sh"

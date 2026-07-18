@@ -6,8 +6,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -z "${PROJECT_ROOT:-}" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"

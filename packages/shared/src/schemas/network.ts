@@ -86,7 +86,10 @@ export const ManagedImageTagSchema = z
   .trim()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'Use a valid container image tag.');
+  .regex(
+    /^\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?$/,
+    'Use an explicit semantic version such as 2.4.1.',
+  );
 
 export const ManagedPeerOrganizationRequestSchema = z.object({
   name: ManagedOrganizationNameSchema,

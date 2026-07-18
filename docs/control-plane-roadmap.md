@@ -37,7 +37,7 @@
 目标：将网络生命周期变成可观察的异步作业。
 
 - [x] Job/JobStep/JobEvent 数据模型与 SQLite 持久化；
-- [x] managed network 独立工作区、Compose project、Docker network 和端口冲突检查；
+- [x] managed network 独立工作区、Compose project、Docker network、文件生成边界和端口冲突检查；
 - [x] 自定义 Peer 组织数、每组织 Peer 数、Orderer 数、多通道和通道成员；
 - [x] Web 中文创建向导、自动端口规划和指定起始端口；
 - [ ] 可选 CouchDB 状态数据库及 CouchDB 节点拓扑；
@@ -46,7 +46,7 @@
 - [x] 无 Shell 拼接的子进程执行器与基础日志脱敏；
 - [x] SSE 实时日志与历史事件重放；
 - [x] up、stop、restart；
-- [x] 带网络 ID 确认的 down；
+- [x] 带网络 ID 确认的 down，只清理目标网络的容器、卷、Docker network、hosts 映射和工作区运行产物；
 - [x] 网络级锁、超时、取消、异常重启恢复和本地作业记录；
 - [x] Operations 页面、步骤状态与实时日志控制台。
 

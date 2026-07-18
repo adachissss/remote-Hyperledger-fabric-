@@ -3,8 +3,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ -z "${PROJECT_ROOT:-}" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 fi
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
@@ -102,7 +102,6 @@ debug "输出文件: $OUTPUT_FILE"
 info "=================================================="
 
 cat > "$OUTPUT_FILE" <<EOF
-version: '3.7'
 services:
 EOF
 

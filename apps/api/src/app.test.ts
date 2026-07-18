@@ -575,6 +575,39 @@ channels:
         concurrentManagedResponses.find((response) => response.statusCode === 409)?.json().error,
         'network_exists',
       );
+      assert.equal(
+        concurrentManagedResponses.find((response) => response.statusCode === 201)?.json()
+          .fabricVersion,
+        '2.4.1',
+      );
+      const defaultManagedConfig = readFileSync(
+        path.join(
+          temporaryRoot,
+          'managed-networks',
+          'managed-race',
+          'config',
+          'orgs.yaml',
+        ),
+        'utf8',
+      );
+      assert.match(defaultManagedConfig, /fabric_version: 2\.4\.1/);
+      assert.match(defaultManagedConfig, /fabric_ca_version: 1\.5\.3/);
+      assert.match(defaultManagedConfig, /remove_docker_network_on_down: true/);
+
+      const floatingVersionResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          ...concurrentManagedPayload,
+          id: 'managed-floating-version',
+          displayName: 'Managed Floating Version',
+          domain: 'managed-floating.test',
+          fabricVersion: 'latest',
+          fabricCaVersion: 'latest',
+        },
+      });
+      assert.equal(floatingVersionResponse.statusCode, 400);
+      assert.equal(floatingVersionResponse.json().error, 'invalid_managed_network');
 
       const managedResponse = await app.inject({
         method: 'POST',
@@ -624,6 +657,7 @@ channels:
       assert.match(managedConfig, /peer_count: 2/);
       assert.match(managedConfig, /fabric_version: 3\.1\.4/);
       assert.match(managedConfig, /fabric_ca_version: 1\.5\.19/);
+      assert.match(managedConfig, /remove_docker_network_on_down: true/);
       assert.equal(
         readFileSync(
           path.join(temporaryRoot, 'managed-networks', 'managed-network', '.env'),
