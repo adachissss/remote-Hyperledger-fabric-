@@ -61,6 +61,19 @@ const RawFabricComposeConfigSchema = z.object({
     name: z.string().min(1).optional(),
     mspid: z.string().min(1).optional(),
     domain: z.string().min(1).optional(),
+    consensus_type: z.enum(['etcdraft', 'solo']).default('etcdraft'),
+    batch_timeout_seconds: z.number().int().min(1).max(300).default(2),
+    batch_size: z
+      .object({
+        max_message_count: z.number().int().min(1).max(10_000).default(10),
+        absolute_max_bytes_mib: z.number().int().min(1).max(99).default(99),
+        preferred_max_bytes_kib: z.number().int().min(1).max(101_376).default(512),
+      })
+      .default({
+        max_message_count: 10,
+        absolute_max_bytes_mib: 99,
+        preferred_max_bytes_kib: 512,
+      }),
     ca_url: z.string().min(1).optional(),
     ca_name: z.string().min(1).optional(),
     ca_port: z.number().int().min(1).max(65535).optional(),
@@ -315,6 +328,13 @@ export function readFabricComposeConfig(
       dockerNetwork: config.network.name,
       tlsEnabled: config.network.tls_enabled,
       stateDatabase: config.network.state_database,
+      ordererConfiguration: {
+        consensusType: config.ordererOrg.consensus_type,
+        batchTimeoutSeconds: config.ordererOrg.batch_timeout_seconds,
+        maxMessageCount: config.ordererOrg.batch_size.max_message_count,
+        absoluteMaxBytesMiB: config.ordererOrg.batch_size.absolute_max_bytes_mib,
+        preferredMaxBytesKiB: config.ordererOrg.batch_size.preferred_max_bytes_kib,
+      },
       orderers: config.ordererOrg.nodes.map((node) => ({
         name: node.name ?? node.host.split('.')[0] ?? node.host,
         host: node.host,

@@ -41,7 +41,8 @@
 - [x] 自定义 Peer 组织数、每组织 Peer 数、Orderer 数、多通道和通道成员；
 - [x] Web 中文创建向导、自动端口规划和指定起始端口；
 - [x] 可选 CouchDB 状态数据库、每 Peer 独立数据卷、端口规划及 CouchDB 节点拓扑；
-- [ ] Orderer 共识类型、BatchSize/BatchTimeout 和节点启动参数；
+- [x] etcdraft/Solo 共识约束及 BatchSize/BatchTimeout 参数；
+- [ ] Raft 细节、日志级别和更多节点启动参数；
 - [x] 按注册工作区、配置路径和 Compose project 调用原脚本，并保留原脚本命令入口；
 - [x] 无 Shell 拼接的子进程执行器与基础日志脱敏；
 - [x] SSE 实时日志与历史事件重放；

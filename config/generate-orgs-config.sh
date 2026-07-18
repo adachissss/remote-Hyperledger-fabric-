@@ -241,6 +241,12 @@ write_orderer_section() {
 ordererOrg:
   mspid: OrdererMSP
   domain: ${DOMAIN}
+  consensus_type: etcdraft
+  batch_timeout_seconds: 2
+  batch_size:
+    max_message_count: 10
+    absolute_max_bytes_mib: 99
+    preferred_max_bytes_kib: 512
   ca_url: https://localhost:${orderer_ca_port}
   ca_name: ca-orderer
   ca_tls_cert: organizations/fabric-ca/ca-orderer/ca-cert.pem

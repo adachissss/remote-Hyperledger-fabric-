@@ -134,7 +134,7 @@ interface NetworkDriver {
 - 锁按 `networkId` 隔离，不同网络的作业可以并行；
 - Fabric/CA 版本属于网络定义；平台默认使用 Fabric `2.4.1` 和 Fabric CA `1.5.3`，每个网络可以显式覆盖，并拒绝 `latest` 等漂移标签。
 
-当前 managed network 创建链路已经实现基础拓扑参数化：Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道、通道成员和 LevelDB/CouchDB 状态数据库均由共享 schema 校验后写入独立工作区。端口规划器为 Orderer gRPC/admin/operations、CA、Peer gRPC/chaincode/metrics，以及启用时每个 Peer 对应的 CouchDB HTTP 服务分配完整区间，并同时排除注册表保留端口和宿主机监听端口。
+当前 managed network 创建链路已经实现基础拓扑参数化：Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道、通道成员、LevelDB/CouchDB 状态数据库，以及 Orderer 共识和批次参数均由共享 schema 校验后写入独立工作区。端口规划器为 Orderer gRPC/admin/operations、CA、Peer gRPC/chaincode/metrics，以及启用时每个 Peer 对应的 CouchDB HTTP 服务分配完整区间，并同时排除注册表保留端口和宿主机监听端口。
 
 Docker network 只隔离容器内部 DNS 和数据面，不能单独解决多网络并存问题。平台还为每个网络派生唯一 Compose project、容器名和 volume namespace，并对 Docker network、Compose project 和宿主机发布端口建立注册表唯一约束。宿主机 Fabric CLI 通过网络专属节点域名和分段 `/etc/hosts` 映射访问容器，容器之间通过各自 Docker network DNS 通信。
 
@@ -142,7 +142,9 @@ Docker network 只隔离容器内部 DNS 和数据面，不能单独解决多网
 
 选择 CouchDB 时，每个 Peer 对应一个独立 CouchDB 容器和持久化卷；Peer 通过 Docker network 内部地址连接数据库，宿主机发布端口用于健康探测和本地实验访问。CouchDB 作为独立拓扑节点进入容器状态、健康状态和服务可达性监视，`down -v` 只删除目标网络对应的数据卷。LevelDB 仍为默认值，不创建额外服务。
 
-PDC 不属于基础网络拓扑：集合定义随链码生命周期部署，公共区块只能看到私有读写集哈希。后续拓扑 schema 将以可选能力逐步加入 Orderer 共识类型、BatchSize/BatchTimeout 和节点级启动参数，避免把未被脚本稳定支持的字段伪装成可用能力。
+Orderer 默认使用 `etcdraft`，支持当前拓扑范围内的多节点 Raft。Fabric 2.x 还可为单 Orderer 本地实验网络选择已弃用的 `solo`；平台禁止多节点 Solo，也禁止 Fabric 3.x 使用 Solo。`BatchTimeout`、`MaxMessageCount`、`AbsoluteMaxBytes` 和 `PreferredMaxBytes` 由结构化字段生成，并校验首选大小不能超过绝对上限。BFT 需要 Fabric 3.x 的 consenter mapping 和不同证书模型，当前不伪装为已支持能力。
+
+PDC 不属于基础网络拓扑：集合定义随链码生命周期部署，公共区块只能看到私有读写集哈希。后续拓扑 schema 将继续加入 Raft 细节和节点级启动参数，避免把未被脚本稳定支持的字段伪装成可用能力。
 
 当前脚本已完成“平台源码目录”和“网络实例工作区”分离：托管创建按白名单复制所需脚本和模板到独立工作区，不复制源码目录里的备份、日志或动态生成文件；Fabric CLI 二进制作为共享工具链挂入工作区。`network.sh` 及其子脚本按脚本目录解析生成路径，driver 则显式传入网络配置和 Compose project。原有仓库根目录命令、Docker Compose 与链码脚本仍可独立使用；控制平面只增加参数校验、作业编排和日志适配，不替换这些入口，也不要求必须通过网页启动网络。
 

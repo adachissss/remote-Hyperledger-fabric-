@@ -92,6 +92,32 @@ export const ManagedImageTagSchema = z
   );
 
 export const FabricStateDatabaseSchema = z.enum(['leveldb', 'couchdb']);
+export const FabricOrdererConsensusSchema = z.enum(['etcdraft', 'solo']);
+export const DEFAULT_MANAGED_ORDERER_CONFIGURATION = {
+  consensusType: 'etcdraft',
+  batchTimeoutSeconds: 2,
+  maxMessageCount: 10,
+  absoluteMaxBytesMiB: 99,
+  preferredMaxBytesKiB: 512,
+} as const;
+
+export const ManagedOrdererConfigurationSchema = z
+  .object({
+    consensusType: FabricOrdererConsensusSchema.default('etcdraft'),
+    batchTimeoutSeconds: z.number().int().min(1).max(300).default(2),
+    maxMessageCount: z.number().int().min(1).max(10_000).default(10),
+    absoluteMaxBytesMiB: z.number().int().min(1).max(99).default(99),
+    preferredMaxBytesKiB: z.number().int().min(1).max(101_376).default(512),
+  })
+  .superRefine((value, context) => {
+    if (value.preferredMaxBytesKiB > value.absoluteMaxBytesMiB * 1024) {
+      context.addIssue({
+        code: 'custom',
+        path: ['preferredMaxBytesKiB'],
+        message: 'Preferred max bytes must not exceed absolute max bytes.',
+      });
+    }
+  });
 
 export const ManagedPeerOrganizationRequestSchema = z.object({
   name: ManagedOrganizationNameSchema,
@@ -121,6 +147,9 @@ export const CreateManagedNetworkRequestSchema = z
     fabricVersion: ManagedImageTagSchema.nullable().default(null),
     fabricCaVersion: ManagedImageTagSchema.nullable().default(null),
     stateDatabase: FabricStateDatabaseSchema.default('leveldb'),
+    ordererConfiguration: ManagedOrdererConfigurationSchema.default(
+      DEFAULT_MANAGED_ORDERER_CONFIGURATION,
+    ),
   })
   .superRefine((value, context) => {
     const organizationNames = value.peerOrganizations.map((organization) => organization.name);
@@ -129,6 +158,23 @@ export const CreateManagedNetworkRequestSchema = z
     addDuplicateIssues(organizationNames, ['peerOrganizations'], 'Organization names must be unique.', context);
     addDuplicateIssues(mspIds, ['peerOrganizations'], 'MSP ids must be unique.', context);
     addDuplicateIssues(channelNames, ['channels'], 'Channel names must be unique.', context);
+    if (value.ordererConfiguration.consensusType === 'solo') {
+      if (value.ordererCount !== 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['ordererCount'],
+          message: 'Solo consensus requires exactly one orderer.',
+        });
+      }
+      const fabricMajor = Number((value.fabricVersion ?? '2.4.1').split('.')[0]);
+      if (fabricMajor >= 3) {
+        context.addIssue({
+          code: 'custom',
+          path: ['ordererConfiguration', 'consensusType'],
+          message: 'Solo consensus is not supported by Fabric 3.x.',
+        });
+      }
+    }
     const knownOrganizations = new Set(organizationNames);
     value.channels.forEach((channel, channelIndex) => {
       const members = new Set<string>();
@@ -194,6 +240,7 @@ export const RedactedNetworkConfigurationSchema = z.object({
   dockerNetwork: z.string(),
   tlsEnabled: z.boolean(),
   stateDatabase: FabricStateDatabaseSchema,
+  ordererConfiguration: ManagedOrdererConfigurationSchema,
   orderers: z.array(NetworkNodeAddressSchema),
   peerOrganizations: z.array(NetworkPeerOrganizationSchema),
   channels: z.array(NetworkChannelConfigurationSchema),
@@ -210,6 +257,8 @@ export type ManagedPeerOrganizationRequest = z.infer<
 >;
 export type ManagedChannelRequest = z.infer<typeof ManagedChannelRequestSchema>;
 export type FabricStateDatabase = z.infer<typeof FabricStateDatabaseSchema>;
+export type FabricOrdererConsensus = z.infer<typeof FabricOrdererConsensusSchema>;
+export type ManagedOrdererConfiguration = z.infer<typeof ManagedOrdererConfigurationSchema>;
 export type CreateManagedNetworkRequest = z.infer<typeof CreateManagedNetworkRequestSchema>;
 export type NetworkNodeAddress = z.infer<typeof NetworkNodeAddressSchema>;
 export type NetworkPeerOrganization = z.infer<typeof NetworkPeerOrganizationSchema>;

@@ -46,6 +46,7 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 
 - 创建或导入多个异名 Fabric 网络，并为托管网络自定义 Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道及通道成员；
 - 托管网络可选择默认 LevelDB 或为每个 Peer 配套独立 CouchDB 容器、数据卷和监视节点；
+- Orderer 可选择 Raft 或单节点实验 Solo，并自定义批次超时、最大交易数和区块批次大小；
 - 托管网络独立工作区、Docker network、Compose project、容器/卷命名空间和宿主机端口规划；
 - 多网络注册、配置、拓扑和节点运行状态查看；
 - `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
@@ -53,7 +54,7 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 - 已安装包与已提交链码清单、通用部署作业以及 evaluate/submit 执行台；
 - 默认简体中文的亮色 Web 控制台。
 
-在“网络”页面点击“创建网络”即可配置基础拓扑和状态数据库。LevelDB 不增加额外容器；选择 CouchDB 后，每个 Peer 会获得独立 CouchDB service、持久化卷、健康检查和宿主机端口，并出现在拓扑与节点状态页面。端口可以由平台自动寻找连续可用区间，也可以指定起始端口；创建时会同时检查注册表保留端口和宿主机监听端口。仅使用不同 Docker network 不能完整避免冲突，因此平台还会保证 Compose project、容器名称、volume namespace 和宿主机发布端口互不复用。
+在“网络”页面点击“创建网络”即可配置基础拓扑、状态数据库和 Orderer 出块策略。LevelDB 不增加额外容器；选择 CouchDB 后，每个 Peer 会获得独立 CouchDB service、持久化卷、健康检查和宿主机端口，并出现在拓扑与节点状态页面。Orderer 默认使用 Raft；Solo 仅允许 Fabric 2.x 的单 Orderer 本地实验网络。批次超时、最大交易数、绝对大小上限和首选大小上限会写入实际通道配置块。端口可以由平台自动寻找连续可用区间，也可以指定起始端口；创建时会同时检查注册表保留端口和宿主机监听端口。多网络仍通过独立 Docker network、Compose project、容器/卷命名空间和宿主机端口共同隔离。
 
 托管网络默认生成到 `runtime/networks/<network-id>`，工作区就是文件隔离边界：配置、证书、通道产物和动态 Compose 文件均生成在各自目录内。工作区只复制运行所需的脚本白名单，不会把源码目录中的 `.bk`、临时 `core.yaml` 等备份或生成物带入新网络；Fabric CLI 二进制作为共享工具链挂入。默认使用 Fabric `2.4.1` 和 Fabric CA `1.5.3`，创建时可以为每个网络显式覆盖版本；必须使用明确的语义版本，不能使用会漂移的 `latest`。
 
@@ -68,7 +69,7 @@ cd runtime/networks/<network-id>
 
 链码部署从已注册网络工作区内的相对源码路径读取，不预置示例链码。部署继续调用工作区原有的 `upgrade_chaincode.sh`，日志、取消、超时和网络互斥沿用统一作业系统；命令行入口不受影响。当前部署过程记录为单个脚本步骤，后续再拆分为可独立重试的 package/install/approve/readiness/commit 结构化步骤。
 
-PDC 属于链码 collections 配置，而不是网络拓扑字段；当前继续在链码部署时按网络工作区内的 collections JSON 配置。Orderer 共识类型、区块大小/出块超时和更多节点启动参数将在后续拓扑版本中逐步开放。
+PDC 属于链码 collections 配置，而不是网络拓扑字段；当前继续在链码部署时按网络工作区内的 collections JSON 配置。更多 Raft 细节和节点级启动参数将在后续拓扑版本中逐步开放。
 
 Caliper 仍暂缓。
 

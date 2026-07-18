@@ -409,6 +409,13 @@ function buildManagedConfig(
     ordererOrg: {
       mspid: 'OrdererMSP',
       domain: request.domain,
+      consensus_type: request.ordererConfiguration.consensusType,
+      batch_timeout_seconds: request.ordererConfiguration.batchTimeoutSeconds,
+      batch_size: {
+        max_message_count: request.ordererConfiguration.maxMessageCount,
+        absolute_max_bytes_mib: request.ordererConfiguration.absoluteMaxBytesMiB,
+        preferred_max_bytes_kib: request.ordererConfiguration.preferredMaxBytesKiB,
+      },
       ca_url: `https://localhost:${ports.ordererCA}`,
       ca_name: `${request.id}-ca-orderer`,
       ca_tls_cert: 'organizations/fabric-ca/ca-orderer/ca-cert.pem',

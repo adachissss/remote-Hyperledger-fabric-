@@ -33,6 +33,53 @@ PRIMARY_CHANNEL_CONFIG=$(load_primary_channel_config)
 PRIMARY_CHANNEL_NAME=$(echo "$PRIMARY_CHANNEL_CONFIG" | "$YQ_BIN" -r '.name')
 PRIMARY_CHANNEL_PROFILE=$(echo "$PRIMARY_CHANNEL_CONFIG" | "$YQ_BIN" -r '.profile')
 PRIMARY_CHANNEL_CONSORTIUM=$(echo "$PRIMARY_CHANNEL_CONFIG" | "$YQ_BIN" -r '.consortium // "SampleConsortium"')
+ORDERER_TYPE=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.consensus_type // "etcdraft"')
+BATCH_TIMEOUT_SECONDS=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_timeout_seconds // 2')
+BATCH_MAX_MESSAGE_COUNT=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.max_message_count // 10')
+BATCH_ABSOLUTE_MAX_BYTES_MIB=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.absolute_max_bytes_mib // 99')
+BATCH_PREFERRED_MAX_BYTES_KIB=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.preferred_max_bytes_kib // 512')
+ORDERER_NODE_COUNT=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.nodes | length')
+FABRIC_VERSION=$(get_config_value_raw '.network.fabric_version // "2.4.1"')
+
+validate_integer_range() {
+  local label="$1"
+  local value="$2"
+  local minimum="$3"
+  local maximum="$4"
+
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( 10#$value < minimum || 10#$value > maximum )); then
+    error "${label} 必须是 ${minimum}-${maximum} 之间的整数，当前值为 ${value}"
+    exit 1
+  fi
+}
+
+validate_integer_range "BatchTimeout（秒）" "$BATCH_TIMEOUT_SECONDS" 1 300
+validate_integer_range "BatchSize.MaxMessageCount" "$BATCH_MAX_MESSAGE_COUNT" 1 10000
+validate_integer_range "BatchSize.AbsoluteMaxBytes（MiB）" "$BATCH_ABSOLUTE_MAX_BYTES_MIB" 1 99
+validate_integer_range "BatchSize.PreferredMaxBytes（KiB）" "$BATCH_PREFERRED_MAX_BYTES_KIB" 1 101376
+
+if (( 10#$BATCH_PREFERRED_MAX_BYTES_KIB > 10#$BATCH_ABSOLUTE_MAX_BYTES_MIB * 1024 )); then
+  error "BatchSize.PreferredMaxBytes 不能大于 AbsoluteMaxBytes"
+  exit 1
+fi
+
+case "$ORDERER_TYPE" in
+  etcdraft) ;;
+  solo)
+    [[ "$ORDERER_NODE_COUNT" -eq 1 ]] || {
+      error "Solo 共识仅支持一个 Orderer，当前配置为 ${ORDERER_NODE_COUNT} 个"
+      exit 1
+    }
+    [[ "${FABRIC_VERSION%%.*}" -lt 3 ]] || {
+      error "Fabric ${FABRIC_VERSION} 不支持 Solo 共识"
+      exit 1
+    }
+    ;;
+  *)
+    error "不支持的 Orderer 共识类型: $ORDERER_TYPE"
+    exit 1
+    ;;
+esac
 
 mapfile -t PEER_ORGS < <(get_peer_org_names)
 
@@ -132,40 +179,48 @@ Application: &ApplicationDefaults
     <<: *ApplicationCapabilities
 
 Orderer: &OrdererDefaults
-  OrdererType: etcdraft
+  OrdererType: ${ORDERER_TYPE}
   Addresses:
 EOF
 
 # 动态生成 Orderer Addresses
 "$YQ_BIN" -r '.ordererOrg.nodes[] | "    - \(.host):\(.port)"' "$CONFIG_FILE" >> "$CONFIGTX_YAML"
 
-cat >> "$CONFIGTX_YAML" <<'EOF'
-  BatchTimeout: 2s
+cat >> "$CONFIGTX_YAML" <<EOF
+  BatchTimeout: ${BATCH_TIMEOUT_SECONDS}s
   BatchSize:
-    MaxMessageCount: 10
-    AbsoluteMaxBytes: 99 MB
-    PreferredMaxBytes: 512 KB
+    MaxMessageCount: ${BATCH_MAX_MESSAGE_COUNT}
+    AbsoluteMaxBytes: ${BATCH_ABSOLUTE_MAX_BYTES_MIB} MB
+    PreferredMaxBytes: ${BATCH_PREFERRED_MAX_BYTES_KIB} KB
+EOF
+
+if [[ "$ORDERER_TYPE" == "etcdraft" ]]; then
+  cat >> "$CONFIGTX_YAML" <<'EOF'
   EtcdRaft:
     Consenters:
 EOF
 
-# 动态生成 Consenters
-export domain="$ORDERER_DOMAIN"
+  # 动态生成 Consenters
+  export domain="$ORDERER_DOMAIN"
 
-"$YQ_BIN" -r '
-  .ordererOrg.nodes[] |
-  "      - Host: " + .host + "\n" +
-  "        Port: " + (.port|tostring) + "\n" +
-  "        ClientTLSCert: ../organizations/ordererOrganizations/" + env(domain) + "/orderers/" + .host + "/tls/server.crt\n" +
-  "        ServerTLSCert: ../organizations/ordererOrganizations/" + env(domain) + "/orderers/" + .host + "/tls/server.crt"
-' "$CONFIG_FILE" >> "$CONFIGTX_YAML"
+  "$YQ_BIN" -r '
+    .ordererOrg.nodes[] |
+    "      - Host: " + .host + "\n" +
+    "        Port: " + (.port|tostring) + "\n" +
+    "        ClientTLSCert: ../organizations/ordererOrganizations/" + env(domain) + "/orderers/" + .host + "/tls/server.crt\n" +
+    "        ServerTLSCert: ../organizations/ordererOrganizations/" + env(domain) + "/orderers/" + .host + "/tls/server.crt"
+  ' "$CONFIG_FILE" >> "$CONFIGTX_YAML"
 
-cat >> "$CONFIGTX_YAML" <<EOF
+  cat >> "$CONFIGTX_YAML" <<'EOF'
     Options:
       TickInterval: 500ms
       ElectionTick: 10
       HeartbeatTick: 1
       MaxInflightBlocks: 5
+EOF
+fi
+
+cat >> "$CONFIGTX_YAML" <<'EOF'
   Organizations: []
   Policies:
     Readers:

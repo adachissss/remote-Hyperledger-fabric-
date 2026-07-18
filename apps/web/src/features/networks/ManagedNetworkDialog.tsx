@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CreateManagedNetworkRequestSchema } from '@plus-fabric/shared';
 import { useMutation } from '@tanstack/react-query';
-import { Boxes, Database, Network, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
+import { Boxes, Database, GitBranch, Network, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
 
 import { createManagedNetwork } from '../../api/control-plane';
 import { getApiErrorMessage } from '../../i18n/zh-CN';
@@ -51,6 +51,11 @@ export function ManagedNetworkDialog({
     fabricVersion: '',
     fabricCaVersion: '',
     stateDatabase: 'leveldb' as 'leveldb' | 'couchdb',
+    consensusType: 'etcdraft' as 'etcdraft' | 'solo',
+    batchTimeoutSeconds: 2 as number | '',
+    maxMessageCount: 10 as number | '',
+    absoluteMaxBytesMiB: 99 as number | '',
+    preferredMaxBytesKiB: 512 as number | '',
   });
   const [organizations, setOrganizations] = useState<OrganizationDraft[]>(() => [
     { key: nextDraftKey('organization'), name: '', mspId: '', peerCount: 1 },
@@ -75,6 +80,14 @@ export function ManagedNetworkDialog({
   const couchdbNodeCount = identity.stateDatabase === 'couchdb' ? peerCount : 0;
   const reservedPortCount =
     ordererCount * 3 + organizations.length + 1 + peerCount * 3 + couchdbNodeCount;
+  const configuredFabricMajor = Number((identity.fabricVersion || '2.4.1').split('.')[0]);
+  const soloUnavailable = ordererCount !== 1 || configuredFabricMajor >= 3;
+
+  useEffect(() => {
+    if (identity.consensusType === 'solo' && soloUnavailable) {
+      setIdentity((current) => ({ ...current, consensusType: 'etcdraft' }));
+    }
+  }, [identity.consensusType, soloUnavailable]);
 
   useEffect(() => {
     const previousFocus =
@@ -164,6 +177,13 @@ export function ManagedNetworkDialog({
       fabricVersion: identity.fabricVersion || null,
       fabricCaVersion: identity.fabricCaVersion || null,
       stateDatabase: identity.stateDatabase,
+      ordererConfiguration: {
+        consensusType: identity.consensusType,
+        batchTimeoutSeconds: Number(identity.batchTimeoutSeconds),
+        maxMessageCount: Number(identity.maxMessageCount),
+        absoluteMaxBytesMiB: Number(identity.absoluteMaxBytesMiB),
+        preferredMaxBytesKiB: Number(identity.preferredMaxBytesKiB),
+      },
     });
     if (!parsed.success) {
       setValidationError(getValidationMessage(parsed.error.issues[0]?.path[0]));
@@ -256,15 +276,128 @@ export function ManagedNetworkDialog({
           </fieldset>
 
           <fieldset className="managed-form-section">
+            <legend><GitBranch size={16} /> Orderer 共识与出块</legend>
+            <div className="managed-feature-options" role="group" aria-label="Orderer 共识类型">
+              <button
+                type="button"
+                className={identity.consensusType === 'etcdraft' ? 'is-active' : ''}
+                aria-pressed={identity.consensusType === 'etcdraft'}
+                onClick={() => setIdentity({ ...identity, consensusType: 'etcdraft' })}
+              >
+                <span className="managed-feature-options__signal" aria-hidden="true" />
+                <strong>Raft / etcdraft</strong>
+                <small>默认共识，支持多 Orderer，适用于当前 Fabric 2.x 托管网络。</small>
+              </button>
+              <button
+                type="button"
+                className={identity.consensusType === 'solo' ? 'is-active' : ''}
+                aria-pressed={identity.consensusType === 'solo'}
+                disabled={soloUnavailable}
+                title={
+                  configuredFabricMajor >= 3
+                    ? 'Fabric 3.x 已不支持 Solo'
+                    : ordererCount !== 1
+                      ? 'Solo 仅支持一个 Orderer'
+                      : '仅建议本地实验使用'
+                }
+                onClick={() => setIdentity({ ...identity, consensusType: 'solo' })}
+              >
+                <span className="managed-feature-options__signal" aria-hidden="true" />
+                <strong>Solo</strong>
+                <small>单节点实验共识，无容错能力；Fabric 3.x 不支持。</small>
+              </button>
+            </div>
+            <div className="managed-orderer-parameters">
+              <label>
+                <span>批次超时</span>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={300}
+                  value={identity.batchTimeoutSeconds}
+                  onChange={(event) =>
+                    setIdentity({
+                      ...identity,
+                      batchTimeoutSeconds:
+                        event.target.value === '' ? '' : event.target.valueAsNumber,
+                    })
+                  }
+                />
+                <small>秒，达到超时后切出新区块。</small>
+              </label>
+              <label>
+                <span>最大交易数</span>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={identity.maxMessageCount}
+                  onChange={(event) =>
+                    setIdentity({
+                      ...identity,
+                      maxMessageCount:
+                        event.target.value === '' ? '' : event.target.valueAsNumber,
+                    })
+                  }
+                />
+                <small>单个区块允许的最大消息数量。</small>
+              </label>
+              <label>
+                <span>绝对大小上限</span>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={identity.absoluteMaxBytesMiB}
+                  onChange={(event) =>
+                    setIdentity({
+                      ...identity,
+                      absoluteMaxBytesMiB:
+                        event.target.value === '' ? '' : event.target.valueAsNumber,
+                    })
+                  }
+                />
+                <small>MiB，任何批次都不能超过该值。</small>
+              </label>
+              <label>
+                <span>首选大小上限</span>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={101376}
+                  value={identity.preferredMaxBytesKiB}
+                  onChange={(event) =>
+                    setIdentity({
+                      ...identity,
+                      preferredMaxBytesKiB:
+                        event.target.value === '' ? '' : event.target.valueAsNumber,
+                    })
+                  }
+                />
+                <small>KiB，必须小于或等于绝对大小上限。</small>
+              </label>
+            </div>
+            <p className={`managed-consensus-note${identity.consensusType === 'solo' ? ' is-warning' : ''}`}>
+              {identity.consensusType === 'solo'
+                ? 'Solo 仅用于本地实验，不提供节点故障容错。'
+                : 'Raft 建议使用奇数个 Orderer，以获得明确的多数派。'}
+            </p>
+          </fieldset>
+
+          <fieldset className="managed-form-section">
             <legend><Database size={16} /> 状态数据库</legend>
-            <div className="managed-database-options" role="group" aria-label="Peer 状态数据库">
+            <div className="managed-feature-options" role="group" aria-label="Peer 状态数据库">
               <button
                 type="button"
                 className={identity.stateDatabase === 'leveldb' ? 'is-active' : ''}
                 aria-pressed={identity.stateDatabase === 'leveldb'}
                 onClick={() => setIdentity({ ...identity, stateDatabase: 'leveldb' })}
               >
-                <span className="managed-database-options__signal" aria-hidden="true" />
+                <span className="managed-feature-options__signal" aria-hidden="true" />
                 <strong>LevelDB</strong>
                 <small>默认内嵌数据库，不增加容器和宿主机端口，适合轻量实验网络。</small>
               </button>
@@ -274,7 +407,7 @@ export function ManagedNetworkDialog({
                 aria-pressed={identity.stateDatabase === 'couchdb'}
                 onClick={() => setIdentity({ ...identity, stateDatabase: 'couchdb' })}
               >
-                <span className="managed-database-options__signal" aria-hidden="true" />
+                <span className="managed-feature-options__signal" aria-hidden="true" />
                 <strong>CouchDB</strong>
                 <small>每个 Peer 配套独立容器和数据卷，支持富 JSON 查询与索引。</small>
               </button>
@@ -534,6 +667,7 @@ function getValidationMessage(path: PropertyKey | undefined): string {
     fabricVersion: 'Fabric 版本',
     fabricCaVersion: 'Fabric CA 版本',
     stateDatabase: '状态数据库',
+    ordererConfiguration: 'Orderer 共识与出块',
   };
   return `请检查${labels[String(path)] ?? '网络'}配置，字段可能为空、重复或引用无效。`;
 }

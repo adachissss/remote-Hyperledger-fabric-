@@ -119,6 +119,35 @@ export function NetworkConfigurationPage() {
             </div>
           </Panel>
 
+          <Panel eyebrow="共识与批次" title="Orderer 出块参数">
+            <dl className="configuration-identity">
+              <ConfigurationField
+                label="共识类型"
+                value={
+                  configuration.ordererConfiguration.consensusType === 'solo'
+                    ? 'Solo（实验）'
+                    : 'Raft / etcdraft'
+                }
+              />
+              <ConfigurationField
+                label="批次超时"
+                value={`${configuration.ordererConfiguration.batchTimeoutSeconds} 秒`}
+              />
+              <ConfigurationField
+                label="最大交易数"
+                value={String(configuration.ordererConfiguration.maxMessageCount)}
+              />
+              <ConfigurationField
+                label="绝对大小上限"
+                value={`${configuration.ordererConfiguration.absoluteMaxBytesMiB} MiB`}
+              />
+              <ConfigurationField
+                label="首选大小上限"
+                value={`${configuration.ordererConfiguration.preferredMaxBytesKiB} KiB`}
+              />
+            </dl>
+          </Panel>
+
           <Panel eyebrow="对等组织" title={`${configuration.peerOrganizations.length} 个 Peer 组织`}>
             <div className="configuration-org-list">
               {configuration.peerOrganizations.map((organization) => (

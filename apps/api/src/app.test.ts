@@ -450,6 +450,13 @@ channels:
       assert.equal(configResponse.statusCode, 200);
       assert.equal(configResponse.json().networkName, 'network-a-docker');
       assert.equal(configResponse.json().stateDatabase, 'leveldb');
+      assert.deepEqual(configResponse.json().ordererConfiguration, {
+        consensusType: 'etcdraft',
+        batchTimeoutSeconds: 2,
+        maxMessageCount: 10,
+        absoluteMaxBytesMiB: 99,
+        preferredMaxBytesKiB: 512,
+      });
       assert.equal(configResponse.json().channels[0].name, 'channel-a');
       assert.doesNotMatch(configResponse.body, /never-return-this/);
 
@@ -627,6 +634,8 @@ channels:
       assert.match(defaultManagedConfig, /fabric_version: 2\.4\.1/);
       assert.match(defaultManagedConfig, /fabric_ca_version: 1\.5\.3/);
       assert.match(defaultManagedConfig, /remove_docker_network_on_down: true/);
+      assert.match(defaultManagedConfig, /consensus_type: etcdraft/);
+      assert.match(defaultManagedConfig, /batch_timeout_seconds: 2/);
 
       const floatingVersionResponse = await app.inject({
         method: 'POST',
@@ -642,6 +651,53 @@ channels:
       });
       assert.equal(floatingVersionResponse.statusCode, 400);
       assert.equal(floatingVersionResponse.json().error, 'invalid_managed_network');
+
+      const invalidSoloResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          ...concurrentManagedPayload,
+          id: 'invalid-solo-network',
+          displayName: 'Invalid Solo Network',
+          domain: 'invalid-solo.test',
+          ordererCount: 2,
+          ordererConfiguration: { consensusType: 'solo' },
+        },
+      });
+      assert.equal(invalidSoloResponse.statusCode, 400);
+      assert.equal(invalidSoloResponse.json().error, 'invalid_managed_network');
+
+      const fabricThreeSoloResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          ...concurrentManagedPayload,
+          id: 'fabric-three-solo',
+          displayName: 'Fabric Three Solo',
+          domain: 'fabric-three-solo.test',
+          fabricVersion: '3.1.4',
+          ordererConfiguration: { consensusType: 'solo' },
+        },
+      });
+      assert.equal(fabricThreeSoloResponse.statusCode, 400);
+      assert.equal(fabricThreeSoloResponse.json().error, 'invalid_managed_network');
+
+      const invalidBatchSizeResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          ...concurrentManagedPayload,
+          id: 'invalid-batch-size',
+          displayName: 'Invalid Batch Size',
+          domain: 'invalid-batch.test',
+          ordererConfiguration: {
+            absoluteMaxBytesMiB: 1,
+            preferredMaxBytesKiB: 2048,
+          },
+        },
+      });
+      assert.equal(invalidBatchSizeResponse.statusCode, 400);
+      assert.equal(invalidBatchSizeResponse.json().error, 'invalid_managed_network');
 
       const managedResponse = await app.inject({
         method: 'POST',
@@ -663,6 +719,13 @@ channels:
           fabricVersion: '3.1.4',
           fabricCaVersion: '1.5.19',
           stateDatabase: 'couchdb',
+          ordererConfiguration: {
+            consensusType: 'etcdraft',
+            batchTimeoutSeconds: 5,
+            maxMessageCount: 25,
+            absoluteMaxBytesMiB: 32,
+            preferredMaxBytesKiB: 1024,
+          },
         },
       });
       assert.equal(managedResponse.statusCode, 201);
@@ -696,6 +759,11 @@ channels:
       assert.match(managedConfig, /state_database: couchdb/);
       assert.match(managedConfig, /couchdb_image: couchdb:3\.3\.3/);
       assert.match(managedConfig, /couchdb_port: 30012/);
+      assert.match(managedConfig, /consensus_type: etcdraft/);
+      assert.match(managedConfig, /batch_timeout_seconds: 5/);
+      assert.match(managedConfig, /max_message_count: 25/);
+      assert.match(managedConfig, /absolute_max_bytes_mib: 32/);
+      assert.match(managedConfig, /preferred_max_bytes_kib: 1024/);
       assert.equal(
         readFileSync(
           path.join(temporaryRoot, 'managed-networks', 'managed-network', '.env'),
@@ -753,6 +821,13 @@ channels:
       });
       assert.equal(managedConfigurationResponse.statusCode, 200);
       assert.equal(managedConfigurationResponse.json().stateDatabase, 'couchdb');
+      assert.deepEqual(managedConfigurationResponse.json().ordererConfiguration, {
+        consensusType: 'etcdraft',
+        batchTimeoutSeconds: 5,
+        maxMessageCount: 25,
+        absoluteMaxBytesMiB: 32,
+        preferredMaxBytesKiB: 1024,
+      });
       assert.equal(
         existsSync(
           path.join(
