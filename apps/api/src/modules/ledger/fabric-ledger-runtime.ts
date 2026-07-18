@@ -20,7 +20,7 @@ export type LedgerPeerContext = {
 export type LedgerChannelInfo = {
   height: string;
   currentBlockHash: string;
-  previousBlockHash: string;
+  previousBlockHash: string | null;
 };
 
 export interface FabricLedgerRuntime {
@@ -52,27 +52,7 @@ export class FabricCliLedgerRuntime implements FabricLedgerRuntime {
     channelName: string,
   ): Promise<LedgerChannelInfo> {
     const { stdout } = await runPeer(peer, ['channel', 'getinfo', '-c', channelName]);
-    const jsonStart = stdout.indexOf('{');
-    if (jsonStart < 0) {
-      throw new Error(`Fabric peer did not return blockchain info for channel "${channelName}".`);
-    }
-    const parsed = JSON.parse(stdout.slice(jsonStart)) as {
-      height?: unknown;
-      currentBlockHash?: unknown;
-      previousBlockHash?: unknown;
-    };
-    if (
-      (typeof parsed.height !== 'number' && typeof parsed.height !== 'string') ||
-      typeof parsed.currentBlockHash !== 'string' ||
-      typeof parsed.previousBlockHash !== 'string'
-    ) {
-      throw new Error(`Fabric peer returned invalid blockchain info for channel "${channelName}".`);
-    }
-    return {
-      height: String(parsed.height),
-      currentBlockHash: parsed.currentBlockHash,
-      previousBlockHash: parsed.previousBlockHash,
-    };
+    return parseBlockchainInfo(stdout, channelName);
   }
 
   async fetchBlock(
@@ -97,6 +77,30 @@ export class FabricCliLedgerRuntime implements FabricLedgerRuntime {
     }
     return Buffer.from(hex, 'hex');
   }
+}
+
+export function parseBlockchainInfo(stdout: string, channelName: string): LedgerChannelInfo {
+  const jsonStart = stdout.indexOf('{');
+  if (jsonStart < 0) {
+    throw new Error(`Fabric peer did not return blockchain info for channel "${channelName}".`);
+  }
+  const parsed = JSON.parse(stdout.slice(jsonStart)) as {
+    height?: unknown;
+    currentBlockHash?: unknown;
+    previousBlockHash?: unknown;
+  };
+  if (
+    (typeof parsed.height !== 'number' && typeof parsed.height !== 'string') ||
+    typeof parsed.currentBlockHash !== 'string' ||
+    (parsed.previousBlockHash !== undefined && typeof parsed.previousBlockHash !== 'string')
+  ) {
+    throw new Error(`Fabric peer returned invalid blockchain info for channel "${channelName}".`);
+  }
+  return {
+    height: String(parsed.height),
+    currentBlockHash: parsed.currentBlockHash,
+    previousBlockHash: parsed.previousBlockHash ?? null,
+  };
 }
 
 async function runPeer(peer: LedgerPeerContext, args: string[]) {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -35,10 +36,16 @@ import { loadConfig, type AppConfig } from './config.js';
 import type { DockerRuntime } from './modules/networks/docker-runtime.js';
 import { TcpServiceProbe, type ServiceProbe } from './modules/networks/service-probe.js';
 import type { ProcessRunner } from './modules/jobs/process-runner.js';
-import type { FabricLedgerRuntime } from './modules/ledger/fabric-ledger-runtime.js';
+import {
+  parseBlockchainInfo,
+  type FabricLedgerRuntime,
+} from './modules/ledger/fabric-ledger-runtime.js';
 import type { FabricChaincodeRuntime } from './modules/chaincodes/fabric-chaincode-runtime.js';
 import type { HostPortProbe } from './modules/networks/managed-port-planner.js';
-import type { ManagedNamespaceProbe } from './modules/networks/managed-network-service.js';
+import {
+  isMissingDockerObjectError,
+  type ManagedNamespaceProbe,
+} from './modules/networks/managed-network-service.js';
 
 function createTestConfig(overrides: NodeJS.ProcessEnv = {}): AppConfig {
   return loadConfig({
@@ -256,6 +263,32 @@ test('TCP service probe distinguishes reachable and closed ports', async () => {
     timeoutMs: 500,
   });
   assert.equal(unreachable.reachable, false);
+});
+
+test('Docker namespace probing recognizes missing object message variants', () => {
+  assert.equal(
+    isMissingDockerObjectError('Error response from daemon: network pf-alpha not found'),
+    true,
+  );
+  assert.equal(
+    isMissingDockerObjectError('Error response from daemon: No such container: pf-alpha-peer0'),
+    true,
+  );
+  assert.equal(isMissingDockerObjectError('Cannot connect to the Docker daemon'), false);
+});
+
+test('Fabric blockchain info accepts a missing genesis previous hash', () => {
+  assert.deepEqual(
+    parseBlockchainInfo(
+      'Blockchain info: {"height":1,"currentBlockHash":"current-hash"}',
+      'genesis-channel',
+    ),
+    {
+      height: '1',
+      currentBlockHash: 'current-hash',
+      previousBlockHash: null,
+    },
+  );
 });
 
 test('network import is disabled until an administrator allows workspace roots', async () => {
@@ -677,6 +710,30 @@ channels:
           path.join(temporaryRoot, 'managed-networks', 'managed-network', 'upgrade_chaincode.sh'),
         ).isFile(),
         true,
+      );
+      assert.equal(
+        existsSync(
+          path.join(
+            temporaryRoot,
+            'managed-networks',
+            'managed-network',
+            'script',
+            'generate-docker-compose-peers.bk',
+          ),
+        ),
+        false,
+      );
+      assert.equal(
+        existsSync(
+          path.join(
+            temporaryRoot,
+            'managed-networks',
+            'managed-network',
+            'script',
+            'core.yaml',
+          ),
+        ),
+        false,
       );
 
       const emptyJobsResponse = await app.inject({

@@ -54,7 +54,7 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 
 在“网络”页面点击“创建网络”即可配置基础拓扑。端口可以由平台自动寻找连续可用区间，也可以指定起始端口；创建时会同时检查注册表保留端口和宿主机监听端口。仅使用不同 Docker network 不能完整避免冲突，因此平台还会保证 Compose project、容器名称、volume namespace 和宿主机发布端口互不复用。
 
-托管网络默认生成到 `runtime/networks/<network-id>`，工作区就是文件隔离边界：配置、证书、通道产物和动态 Compose 文件均生成在各自目录内。默认使用 Fabric `2.4.1` 和 Fabric CA `1.5.3`，创建时可以为每个网络显式覆盖版本；必须使用明确的语义版本，不能使用会漂移的 `latest`。
+托管网络默认生成到 `runtime/networks/<network-id>`，工作区就是文件隔离边界：配置、证书、通道产物和动态 Compose 文件均生成在各自目录内。工作区只复制运行所需的脚本白名单，不会把源码目录中的 `.bk`、临时 `core.yaml` 等备份或生成物带入新网络；Fabric CLI 二进制作为共享工具链挂入。默认使用 Fabric `2.4.1` 和 Fabric CA `1.5.3`，创建时可以为每个网络显式覆盖版本；必须使用明确的语义版本，不能使用会漂移的 `latest`。
 
 网页创建完成后仍可进入对应工作区直接使用原脚本：
 

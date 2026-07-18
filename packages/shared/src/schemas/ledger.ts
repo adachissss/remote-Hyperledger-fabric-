@@ -120,7 +120,7 @@ export const LedgerChannelSchema = z.object({
   height: FabricBlockNumberSchema,
   currentBlockNumber: FabricBlockNumberSchema.nullable(),
   currentBlockHash: z.string(),
-  previousBlockHash: z.string(),
+  previousBlockHash: z.string().nullable(),
   observedPeer: z.string(),
   observedAt: z.string().datetime(),
 });

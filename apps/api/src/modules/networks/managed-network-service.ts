@@ -28,6 +28,25 @@ import {
 const execFileAsync = promisify(execFile);
 const DEFAULT_FABRIC_VERSION = '2.4.1';
 const DEFAULT_FABRIC_CA_VERSION = '1.5.3';
+const MANAGED_SCRIPT_FILES = [
+  'connection-file-generation.sh',
+  'docker-ip-hosts-Mapping.sh',
+  'env.sh',
+  'export-network-info.sh',
+  'generate-channel-config.sh',
+  'generate-docker-compose-ca.sh',
+  'generate-docker-compose-orderers.sh',
+  'generate-docker-compose-peers.sh',
+  'generate-orderer-certs.sh',
+  'generate-peer-org.sh',
+  'generate_core_yaml.sh',
+  'install-fabric-tools.sh',
+  'joinChannel.sh',
+  'lib/fabric-ca-lib.sh',
+  'osnadmin-examples.sh',
+  'setGlobals.sh',
+  'update-docker-compose-networks.sh',
+] as const;
 
 export interface ManagedNamespaceProbe {
   assertAvailable(dockerNetwork: string, containerNames: string[]): Promise<void>;
@@ -218,13 +237,16 @@ export class ManagedNetworkService {
     configYaml: string,
     composeProject: string,
   ): Promise<void> {
+    const scriptTemplateRoot = path.join(this.driverTemplateRoot, 'script');
     try {
       await Promise.all([
         access(path.join(this.driverTemplateRoot, 'network.sh'), constants.X_OK),
         access(path.join(this.driverTemplateRoot, 'upgrade_chaincode.sh'), constants.X_OK),
         access(path.join(this.driverTemplateRoot, 'smart_contract_execute.sh'), constants.X_OK),
         access(path.join(this.driverTemplateRoot, 'core-template.yaml'), constants.R_OK),
-        access(path.join(this.driverTemplateRoot, 'script'), constants.R_OK),
+        ...MANAGED_SCRIPT_FILES.map((relativePath) =>
+          access(path.join(scriptTemplateRoot, relativePath), constants.R_OK),
+        ),
         access(path.join(this.driverTemplateRoot, 'bin'), constants.R_OK),
       ]);
     } catch {
@@ -267,8 +289,9 @@ export class ManagedNetworkService {
           path.join(this.driverTemplateRoot, 'core-template.yaml'),
           path.join(workspaceRoot, 'core-template.yaml'),
         ),
-        cp(path.join(this.driverTemplateRoot, 'script'), path.join(workspaceRoot, 'script'), {
+        cp(scriptTemplateRoot, path.join(workspaceRoot, 'script'), {
           recursive: true,
+          filter: (source) => shouldCopyManagedScript(scriptTemplateRoot, source),
         }),
         symlink(path.join(this.driverTemplateRoot, 'bin'), path.join(workspaceRoot, 'bin'), 'dir'),
       ]);
@@ -289,6 +312,15 @@ export class ManagedNetworkService {
       );
     }
   }
+}
+
+function shouldCopyManagedScript(scriptRoot: string, source: string): boolean {
+  const relativePath = path.relative(scriptRoot, source);
+  if (relativePath === '') return true;
+  return MANAGED_SCRIPT_FILES.some(
+    (allowedPath) =>
+      allowedPath === relativePath || allowedPath.startsWith(`${relativePath}${path.sep}`),
+  );
 }
 
 type ManagedNames = {
@@ -432,7 +464,7 @@ async function dockerObjectExists(args: string[]): Promise<boolean> {
       error instanceof Error && 'stderr' in error && typeof error.stderr === 'string'
         ? error.stderr
         : '';
-    if (/no such (network|object|container)/i.test(stderr)) {
+    if (isMissingDockerObjectError(stderr)) {
       return false;
     }
     const message = error instanceof Error ? error.message : 'Unknown Docker CLI error.';
@@ -442,4 +474,11 @@ async function dockerObjectExists(args: string[]): Promise<boolean> {
       503,
     );
   }
+}
+
+export function isMissingDockerObjectError(stderr: string): boolean {
+  return (
+    /no such (network|object|container)/i.test(stderr) ||
+    /(?:network|container)\s+.+\s+not found/i.test(stderr)
+  );
 }
