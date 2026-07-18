@@ -105,9 +105,9 @@ export class NetworkObservatoryService {
       return { ...runtime, serviceReachable: false };
     }
 
-    const endpoint = node.endpoints.find((candidate) =>
-      node.type === 'ca' ? candidate.kind === 'ca' : candidate.kind === 'grpc',
-    );
+    const primaryEndpointKind =
+      node.type === 'ca' ? 'ca' : node.type === 'couchdb' ? 'couchdb' : 'grpc';
+    const endpoint = node.endpoints.find((candidate) => candidate.kind === primaryEndpointKind);
     if (!endpoint) return runtime;
 
     let reachable = false;

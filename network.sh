@@ -102,10 +102,11 @@ wait_for_ca_services() {
 wait_for_fabric_services() {
     local timeout_seconds="${FABRIC_NODE_STARTUP_TIMEOUT_SECONDS:-60}"
     local entry node_type node_name node_port deadline
-    local org domain peer_count configured_port host_port_offset org_index=0 peer_index
+    local org domain peer_count configured_port host_port_offset state_database couchdb_host org_index=0 peer_index
     local entries=()
 
     host_port_offset=$(get_config_value_raw '.network.network_port__start // 0')
+    state_database=$(get_config_value_raw '.network.state_database // "leveldb"')
 
     mapfile -t entries < <(
         get_config_value_raw '.ordererOrg.nodes[] | "Orderer|\(.host)|\(.port)"'
@@ -119,6 +120,14 @@ wait_for_fabric_services() {
                 node_port=$((host_port_offset + node_port))
                 node_name="$(get_config_value_raw '.network.env_prefix')-peer${peer_index}.${domain}"
                 echo "Peer|${node_name}|${node_port}"
+                if [[ "$state_database" == "couchdb" ]]; then
+                    configured_port=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].couchdb_port // empty")
+                    node_port="${configured_port:-$((7000 + org_index * 100 + peer_index * 10 + 58))}"
+                    node_port=$((host_port_offset + node_port))
+                    couchdb_host=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].couchdb_host // empty")
+                    couchdb_host="${couchdb_host:-${node_name}-couchdb}"
+                    echo "CouchDB|${couchdb_host}|${node_port}"
+                fi
             done
             org_index=$((org_index + 1))
         done < <(get_peer_org_names)

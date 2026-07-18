@@ -35,6 +35,27 @@ test('managed port planner allocates one unique contiguous range for the complet
   assert(plan.publishedPorts.every((port) => plan.reservedPorts.includes(port)));
 });
 
+test('managed port planner reserves one published CouchDB port for every peer', async () => {
+  const probe: HostPortProbe = { async isAvailable() { return true; } };
+  const couchdbRequest = CreateManagedNetworkRequestSchema.parse({
+    ...request,
+    stateDatabase: 'couchdb',
+  });
+  const plan = await new ManagedPortPlanner(probe).plan(couchdbRequest, new Set());
+
+  assert.equal(plan.start, 30_000);
+  assert.equal(plan.end, 30_020);
+  assert.deepEqual(
+    [...plan.peers.alpha!, ...plan.peers.beta!].map((peer) => peer.couchdb),
+    [30_012, 30_016, 30_020],
+  );
+  assert(
+    [...plan.peers.alpha!, ...plan.peers.beta!].every(
+      (peer) => peer.couchdb !== null && plan.publishedPorts.includes(peer.couchdb),
+    ),
+  );
+});
+
 test('managed port planner rejects registered and host port conflicts', async () => {
   const availableProbe: HostPortProbe = { async isAvailable() { return true; } };
   await assert.rejects(

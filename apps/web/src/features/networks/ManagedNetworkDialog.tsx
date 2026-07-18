@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CreateManagedNetworkRequestSchema } from '@plus-fabric/shared';
 import { useMutation } from '@tanstack/react-query';
-import { Boxes, Network, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
+import { Boxes, Database, Network, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
 
 import { createManagedNetwork } from '../../api/control-plane';
 import { getApiErrorMessage } from '../../i18n/zh-CN';
@@ -50,6 +50,7 @@ export function ManagedNetworkDialog({
     preferredPortStart: '',
     fabricVersion: '',
     fabricCaVersion: '',
+    stateDatabase: 'leveldb' as 'leveldb' | 'couchdb',
   });
   const [organizations, setOrganizations] = useState<OrganizationDraft[]>(() => [
     { key: nextDraftKey('organization'), name: '', mspId: '', peerCount: 1 },
@@ -71,7 +72,9 @@ export function ManagedNetworkDialog({
     [organizations],
   );
   const ordererCount = identity.ordererCount === '' ? 0 : identity.ordererCount;
-  const reservedPortCount = ordererCount * 3 + organizations.length + 1 + peerCount * 3;
+  const couchdbNodeCount = identity.stateDatabase === 'couchdb' ? peerCount : 0;
+  const reservedPortCount =
+    ordererCount * 3 + organizations.length + 1 + peerCount * 3 + couchdbNodeCount;
 
   useEffect(() => {
     const previousFocus =
@@ -160,6 +163,7 @@ export function ManagedNetworkDialog({
           : null,
       fabricVersion: identity.fabricVersion || null,
       fabricCaVersion: identity.fabricCaVersion || null,
+      stateDatabase: identity.stateDatabase,
     });
     if (!parsed.success) {
       setValidationError(getValidationMessage(parsed.error.issues[0]?.path[0]));
@@ -194,6 +198,7 @@ export function ManagedNetworkDialog({
             <span><strong>{organizations.length}</strong> Peer 组织</span>
             <span><strong>{peerCount}</strong> Peer 节点</span>
             <span><strong>{ordererCount}</strong> Orderer 节点</span>
+            <span><strong>{couchdbNodeCount}</strong> CouchDB 节点</span>
             <span><strong>{channels.length}</strong> 通道</span>
             <span><strong>{reservedPortCount}</strong> 规划端口</span>
           </div>
@@ -247,6 +252,32 @@ export function ManagedNetworkDialog({
                   }
                 />
               </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="managed-form-section">
+            <legend><Database size={16} /> 状态数据库</legend>
+            <div className="managed-database-options" role="group" aria-label="Peer 状态数据库">
+              <button
+                type="button"
+                className={identity.stateDatabase === 'leveldb' ? 'is-active' : ''}
+                aria-pressed={identity.stateDatabase === 'leveldb'}
+                onClick={() => setIdentity({ ...identity, stateDatabase: 'leveldb' })}
+              >
+                <span className="managed-database-options__signal" aria-hidden="true" />
+                <strong>LevelDB</strong>
+                <small>默认内嵌数据库，不增加容器和宿主机端口，适合轻量实验网络。</small>
+              </button>
+              <button
+                type="button"
+                className={identity.stateDatabase === 'couchdb' ? 'is-active' : ''}
+                aria-pressed={identity.stateDatabase === 'couchdb'}
+                onClick={() => setIdentity({ ...identity, stateDatabase: 'couchdb' })}
+              >
+                <span className="managed-database-options__signal" aria-hidden="true" />
+                <strong>CouchDB</strong>
+                <small>每个 Peer 配套独立容器和数据卷，支持富 JSON 查询与索引。</small>
+              </button>
             </div>
           </fieldset>
 
@@ -502,6 +533,7 @@ function getValidationMessage(path: PropertyKey | undefined): string {
     preferredPortStart: '端口规划',
     fabricVersion: 'Fabric 版本',
     fabricCaVersion: 'Fabric CA 版本',
+    stateDatabase: '状态数据库',
   };
   return `请检查${labels[String(path)] ?? '网络'}配置，字段可能为空、重复或引用无效。`;
 }

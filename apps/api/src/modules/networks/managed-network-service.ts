@@ -326,6 +326,7 @@ function shouldCopyManagedScript(scriptRoot: string, source: string): boolean {
 type ManagedNames = {
   ordererHosts: string[];
   peerHosts: Record<string, string[]>;
+  couchdbHosts: Record<string, string[]>;
   peerCAContainers: Record<string, string>;
   ordererCAContainer: string;
   containerNames: string[];
@@ -355,15 +356,23 @@ function buildManagedNames(
       `${envPrefix}-ca_${organization.name}`,
     ]),
   );
+  const couchdbHosts = Object.fromEntries(
+    Object.entries(peerHosts).map(([organizationName, hosts]) => [
+      organizationName,
+      hosts.map((host) => `${host}-couchdb`),
+    ]),
+  );
   const ordererCAContainer = `${envPrefix}-ca_orderer`;
   return {
     ordererHosts,
     peerHosts,
+    couchdbHosts,
     peerCAContainers,
     ordererCAContainer,
     containerNames: [
       ...ordererHosts,
       ...Object.values(peerHosts).flat(),
+      ...(request.stateDatabase === 'couchdb' ? Object.values(couchdbHosts).flat() : []),
       ...Object.values(peerCAContainers),
       ordererCAContainer,
     ],
@@ -394,6 +403,8 @@ function buildManagedConfig(
       remove_docker_network_on_down: true,
       fabric_version: fabricVersion,
       fabric_ca_version: fabricCaVersion,
+      state_database: request.stateDatabase,
+      couchdb_image: 'couchdb:3.3.3',
     },
     ordererOrg: {
       mspid: 'OrdererMSP',
@@ -430,6 +441,14 @@ function buildManagedConfig(
           peer_port: organizationPeers[index]!.peer,
           chaincode_port: organizationPeers[index]!.chaincode,
           metrics_port: organizationPeers[index]!.metrics,
+          ...(request.stateDatabase === 'couchdb'
+            ? {
+                couchdb_host: names.couchdbHosts[organization.name]![index],
+                couchdb_port: organizationPeers[index]!.couchdb,
+                couchdb_username: 'admin',
+                couchdb_password: createLocalPassword(),
+              }
+            : {}),
         })),
         anchor_peers: [
           {

@@ -29,6 +29,7 @@ get_component_offset() {
     peer) echo 51 ;;
     chaincode) echo 52 ;;
     metrics) echo 55 ;;
+    couchdb) echo 58 ;;
     *) log_error "未知组件: $component"; exit 1 ;;
   esac
 }
@@ -43,6 +44,7 @@ get_port_override() {
     peer) field='peer_port' ;;
     chaincode) field='chaincode_port' ;;
     metrics) field='metrics_port' ;;
+    couchdb) field='couchdb_port' ;;
     *) log_error "未知组件: $component"; exit 1 ;;
   esac
 
@@ -89,6 +91,8 @@ FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
 FABRIC_NET_PORT=$(get_config_value_raw '.network.network_port__start // 0')
 FABRIC_IMAGE_TAG=$(get_config_value_raw '.network.fabric_version // "latest"')
+STATE_DATABASE=$(get_config_value_raw '.network.state_database // "leveldb"')
+COUCHDB_IMAGE=$(get_config_value_raw '.network.couchdb_image // "couchdb:3.3.3"')
 
 
 for org in "${PEER_ORGS[@]}"; do
@@ -106,8 +110,10 @@ for org in "${PEER_ORGS[@]}"; do
     PORT=$(get_port "$org" "$i" peer)
     CHAINCODE_PORT=$(get_port "$org" "$i" chaincode)
     METRICS_PORT=$(get_port "$org" "$i" metrics)
+    COUCHDB_PORT=$(get_port "$org" "$i" couchdb)
     HOST_PORT=$((FABRIC_NET_PORT + PORT))
     HOST_METRICS_PORT=$((FABRIC_NET_PORT + METRICS_PORT))
+    HOST_COUCHDB_PORT=$((FABRIC_NET_PORT + COUCHDB_PORT))
 
     # 所有 peer 都独立从 orderer 拉取区块，bootstrap 指向本组织 peer0
     BOOTSTRAP_PORT=$(get_port "$org" 0 peer)
@@ -116,6 +122,46 @@ for org in "${PEER_ORGS[@]}"; do
 
     ORGLEADER="true"
     USELEADERELECTION="false"
+
+    COUCHDB_PEER_SETTINGS="      - CORE_LEDGER_STATE_STATEDATABASE=goleveldb"
+    COUCHDB_DEPENDS_ON=""
+    if [[ "$STATE_DATABASE" == "couchdb" ]]; then
+      COUCHDB_HOST=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${i}].couchdb_host // empty")
+      COUCHDB_HOST="${COUCHDB_HOST:-${PEER_HOST}-couchdb}"
+      COUCHDB_USERNAME=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${i}].couchdb_username // \"admin\"")
+      COUCHDB_PASSWORD=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${i}].couchdb_password // \"adminpw\"")
+
+      cat >> "$OUTPUT_FILE" <<EOF
+
+  ${COUCHDB_HOST}:
+    container_name: ${COUCHDB_HOST}
+    image: ${COUCHDB_IMAGE}
+    environment:
+      - COUCHDB_USER=${COUCHDB_USERNAME}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+    ports:
+      - ${HOST_COUCHDB_PORT}:5984
+    volumes:
+      - ${COUCHDB_HOST}:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u ${COUCHDB_USERNAME}:${COUCHDB_PASSWORD} http://127.0.0.1:5984/_up || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks:
+      - ${FABRIC_DOCKER_NET}
+EOF
+      ALL_VOLUMES+=("  ${COUCHDB_HOST}:")
+      COUCHDB_PEER_SETTINGS=$(printf '%s\n' \
+        "      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB" \
+        "      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=${COUCHDB_HOST}:5984" \
+        "      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=${COUCHDB_USERNAME}" \
+        "      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=${COUCHDB_PASSWORD}")
+      COUCHDB_DEPENDS_ON=$(printf '%s\n' \
+        "    depends_on:" \
+        "      ${COUCHDB_HOST}:" \
+        "        condition: service_healthy")
+    fi
 
 
     cat >> "$OUTPUT_FILE" <<EOF
@@ -158,6 +204,8 @@ for org in "${PEER_ORGS[@]}"; do
       - CORE_PEER_GOSSIP_USELEADERELECTION=${USELEADERELECTION}
       - CORE_PEER_DELIVERYCLIENT_BLOCKGOSSIPENABLED=false
 
+${COUCHDB_PEER_SETTINGS}
+
       - CORE_OPERATIONS_LISTENADDRESS=0.0.0.0:${METRICS_PORT}
       - CORE_OPERATIONS_TLS_ENABLED=false
       - CORE_METRICS_PROVIDER=prometheus
@@ -170,6 +218,7 @@ for org in "${PEER_ORGS[@]}"; do
       - CORE_CHAINCODE_INSTALLTIMEOUT=180s
       - CORE_CHAINCODE_STARTUPTIMEOUT=180s
       - CORE_CHAINCODE_EXTERNALBUILDERS=[]
+${COUCHDB_DEPENDS_ON}
     volumes:
       - ../organizations/peerOrganizations/${FABRIC_NET_PREFIX}-${DOMAIN}/peers/${PEER_HOST}/msp:/etc/hyperledger/fabric/msp
       - ../organizations/peerOrganizations/${FABRIC_NET_PREFIX}-${DOMAIN}/peers/${PEER_HOST}/tls:/etc/hyperledger/fabric/tls

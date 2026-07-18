@@ -25,6 +25,8 @@ const RawPeerOverrideSchema = z.object({
   peer_port: z.number().int().min(1).max(65535).optional(),
   chaincode_port: z.number().int().min(1).max(65535).optional(),
   metrics_port: z.number().int().min(1).max(65535).optional(),
+  couchdb_host: z.string().min(1).optional(),
+  couchdb_port: z.number().int().min(1).max(65535).optional(),
 });
 
 const RawPeerOrganizationSchema = z.object({
@@ -53,6 +55,7 @@ const RawFabricComposeConfigSchema = z.object({
     namespace_containers: z.boolean().default(false),
     network_port__start: z.number().int().nonnegative().default(0),
     tls_enabled: z.boolean().default(true),
+    state_database: z.enum(['leveldb', 'couchdb']).default('leveldb'),
   }),
   ordererOrg: z.object({
     name: z.string().min(1).optional(),
@@ -190,6 +193,33 @@ export function readFabricComposeConfig(
       };
       organizationNodes.push(node);
       peerNodes.push(node);
+
+      if (config.network.state_database === 'couchdb') {
+        const couchdbHost = override?.couchdb_host ?? `${host}-couchdb`;
+        const couchdbPort =
+          override?.couchdb_port ?? peerPortFor(organizationIndex, peerIndex, 58);
+        const couchdbNode: NetworkTopologyNode = {
+          id: couchdbHost,
+          type: 'couchdb',
+          name: `${node.name}-couchdb`,
+          organizationId,
+          organizationName: organization.name,
+          mspId: organization.mspid,
+          host: couchdbHost,
+          containerName: couchdbHost,
+          endpoints: [
+            {
+              kind: 'couchdb',
+              protocol: 'http',
+              host: couchdbHost,
+              port: config.network.network_port__start + couchdbPort,
+              internalPort: 5984,
+            },
+          ],
+        };
+        organizationNodes.push(couchdbNode);
+        peerNodes.push(couchdbNode);
+      }
     }
 
     const caNode = buildCaNode({
@@ -284,6 +314,7 @@ export function readFabricComposeConfig(
       domain: config.network.domain,
       dockerNetwork: config.network.name,
       tlsEnabled: config.network.tls_enabled,
+      stateDatabase: config.network.state_database,
       orderers: config.ordererOrg.nodes.map((node) => ({
         name: node.name ?? node.host.split('.')[0] ?? node.host,
         host: node.host,

@@ -95,6 +95,10 @@ export function NetworkConfigurationPage() {
                 label="传输安全"
                 value={configuration.tlsEnabled ? 'TLS 已启用' : 'TLS 已停用'}
               />
+              <ConfigurationField
+                label="状态数据库"
+                value={configuration.stateDatabase === 'couchdb' ? 'CouchDB' : 'LevelDB'}
+              />
             </dl>
           </Panel>
 

@@ -228,6 +228,8 @@ network:
   id: ${NETWORK_ID}
   env_prefix: ${ENV_PREFIX}
   network_port__start: ${NETWORK_PORT_START}
+  state_database: leveldb
+  couchdb_image: couchdb:3.3.3
 EOF
 }
 

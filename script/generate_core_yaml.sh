@@ -43,6 +43,10 @@ main() {
     local generated=0
     local org org_config msp domain peer_count peer_host peer_path
     local peer_port chaincode_port ops_port bootstrap_port gossip bootstrap output_file
+    local state_database core_state_database couchdb_address couchdb_username couchdb_password couchdb_host
+    state_database=$(get_config_value_raw '.network.state_database // "leveldb"')
+    core_state_database="goleveldb"
+    [[ "$state_database" == "couchdb" ]] && core_state_database="CouchDB"
     while IFS= read -r org; do
         [[ -n "$org" ]] || continue
         org_config=$(load_peer_org_config "$org")
@@ -66,6 +70,17 @@ main() {
             bootstrap="${FABRIC_NET_PREFIX}-peer0.${domain}:${bootstrap_port}"
             output_file="${peer_path}/core.yaml"
 
+            couchdb_address="127.0.0.1:5984"
+            couchdb_username=""
+            couchdb_password=""
+            if [[ "$state_database" == "couchdb" ]]; then
+                couchdb_host=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].couchdb_host // empty")
+                couchdb_host="${couchdb_host:-${peer_host}-couchdb}"
+                couchdb_address="${couchdb_host}:5984"
+                couchdb_username=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].couchdb_username // \"admin\"")
+                couchdb_password=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].couchdb_password // \"adminpw\"")
+            fi
+
             log_info "处理 peer: $peer_host  地址: $gossip  MSP: $msp"
 
             sed -e "s#{{PEER_ID}}#${peer_host}#g" \
@@ -83,6 +98,10 @@ main() {
                 -e "s#{{NETWORK_ID}}#${FABRIC_NET_ID}#g" \
                 -e "s#{{DOCKER_NETWORK}}#${FABRIC_DOCKER_NET}#g" \
                 -e "s#{{SNAPSHOT_ROOT_DIR}}#${SNAPSHOT_ROOT_DIR}#g" \
+                -e "s#{{STATE_DATABASE}}#${core_state_database}#g" \
+                -e "s#{{COUCHDB_ADDRESS}}#${couchdb_address}#g" \
+                -e "s#{{COUCHDB_USERNAME}}#${couchdb_username}#g" \
+                -e "s#{{COUCHDB_PASSWORD}}#${couchdb_password}#g" \
                 "$TEMPLATE_FILE" > "$output_file"
             generated=$((generated + 1))
         done

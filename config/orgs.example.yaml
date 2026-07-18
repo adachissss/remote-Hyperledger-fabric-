@@ -8,6 +8,8 @@ network:
   id: AdaNet-001
   env_prefix: ADANET
   network_port__start: 0
+  state_database: leveldb
+  couchdb_image: couchdb:3.3.3
 
 ordererOrg:
   mspid: OrdererMSP

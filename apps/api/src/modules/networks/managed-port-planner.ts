@@ -12,6 +12,7 @@ export type ManagedPeerPorts = {
   peer: number;
   chaincode: number;
   metrics: number;
+  couchdb: number | null;
 };
 
 export type ManagedNetworkPortPlan = {
@@ -115,7 +116,8 @@ function requiredPortCount(request: CreateManagedNetworkRequest): number {
     (total, organization) => total + organization.peerCount,
     0,
   );
-  return request.ordererCount * 3 + request.peerOrganizations.length + 1 + peerCount * 3;
+  const peerPortCount = request.stateDatabase === 'couchdb' ? 4 : 3;
+  return request.ordererCount * 3 + request.peerOrganizations.length + 1 + peerCount * peerPortCount;
 }
 
 function buildPortPlan(
@@ -139,6 +141,7 @@ function buildPortPlan(
         peer: cursor++,
         chaincode: cursor++,
         metrics: cursor++,
+        couchdb: request.stateDatabase === 'couchdb' ? cursor++ : null,
       })),
     ]),
   );
@@ -155,7 +158,11 @@ function buildPortPlan(
     ...Object.values(peerCAs),
     ordererCA,
     ...Object.values(peers).flatMap((organizationPeers) =>
-      organizationPeers.flatMap((peer) => [peer.peer, peer.metrics]),
+      organizationPeers.flatMap((peer) => [
+        peer.peer,
+        peer.metrics,
+        ...(peer.couchdb === null ? [] : [peer.couchdb]),
+      ]),
     ),
   ];
   return {

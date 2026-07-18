@@ -139,12 +139,12 @@ bccsp:
 ledger:
   blockchain:
   state:
-    stateDatabase: goleveldb
+    stateDatabase: {{STATE_DATABASE}}
     totalQueryLimit: 100000
     couchDBConfig:
-      couchDBAddress: 127.0.0.1:5984
-      username: ""
-      password: ""
+      couchDBAddress: {{COUCHDB_ADDRESS}}
+      username: "{{COUCHDB_USERNAME}}"
+      password: "{{COUCHDB_PASSWORD}}"
       maxRetries: 3
       maxRetriesOnStartup: 12
       requestTimeout: 35s

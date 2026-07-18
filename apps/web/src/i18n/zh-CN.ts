@@ -101,6 +101,7 @@ const nodeTypeLabels: Record<NetworkNodeType, string> = {
   peer: 'Peer 节点',
   orderer: 'Orderer 节点',
   ca: 'CA 节点',
+  couchdb: 'CouchDB 节点',
 };
 
 const jobStatusLabels: Record<JobStatus, string> = {
@@ -196,6 +197,7 @@ export function getEndpointKindLabel(kind: string): string {
       operations: '运维端点',
       metrics: '指标端点',
       ca: 'CA 端点',
+      couchdb: 'CouchDB 端点',
     }[kind] ?? kind
   );
 }

@@ -6,6 +6,7 @@ import {
   Building2,
   Cable,
   CircleDot,
+  Database,
   Network,
   RadioTower,
   ShieldCheck,
@@ -26,6 +27,7 @@ const nodeIcons = {
   peer: RadioTower,
   orderer: Box,
   ca: ShieldCheck,
+  couchdb: Database,
 };
 
 export function NetworkTopologyPage() {

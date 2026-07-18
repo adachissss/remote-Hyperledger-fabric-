@@ -91,6 +91,8 @@ export const ManagedImageTagSchema = z
     'Use an explicit semantic version such as 2.4.1.',
   );
 
+export const FabricStateDatabaseSchema = z.enum(['leveldb', 'couchdb']);
+
 export const ManagedPeerOrganizationRequestSchema = z.object({
   name: ManagedOrganizationNameSchema,
   mspId: z
@@ -118,6 +120,7 @@ export const CreateManagedNetworkRequestSchema = z
     preferredPortStart: z.number().int().min(10_000).max(60_000).nullable().default(null),
     fabricVersion: ManagedImageTagSchema.nullable().default(null),
     fabricCaVersion: ManagedImageTagSchema.nullable().default(null),
+    stateDatabase: FabricStateDatabaseSchema.default('leveldb'),
   })
   .superRefine((value, context) => {
     const organizationNames = value.peerOrganizations.map((organization) => organization.name);
@@ -190,6 +193,7 @@ export const RedactedNetworkConfigurationSchema = z.object({
   domain: z.string(),
   dockerNetwork: z.string(),
   tlsEnabled: z.boolean(),
+  stateDatabase: FabricStateDatabaseSchema,
   orderers: z.array(NetworkNodeAddressSchema),
   peerOrganizations: z.array(NetworkPeerOrganizationSchema),
   channels: z.array(NetworkChannelConfigurationSchema),
@@ -205,6 +209,7 @@ export type ManagedPeerOrganizationRequest = z.infer<
   typeof ManagedPeerOrganizationRequestSchema
 >;
 export type ManagedChannelRequest = z.infer<typeof ManagedChannelRequestSchema>;
+export type FabricStateDatabase = z.infer<typeof FabricStateDatabaseSchema>;
 export type CreateManagedNetworkRequest = z.infer<typeof CreateManagedNetworkRequestSchema>;
 export type NetworkNodeAddress = z.infer<typeof NetworkNodeAddressSchema>;
 export type NetworkPeerOrganization = z.infer<typeof NetworkPeerOrganizationSchema>;

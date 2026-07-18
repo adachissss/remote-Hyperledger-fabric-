@@ -6,6 +6,7 @@ import {
   Box,
   ChevronDown,
   CircleAlert,
+  Database,
   RadioTower,
   Server,
   ShieldCheck,
@@ -35,6 +36,7 @@ const nodeIcons = {
   peer: RadioTower,
   orderer: Box,
   ca: ShieldCheck,
+  couchdb: Database,
 };
 
 const nodeFilterLabels: Record<NodeFilter, string> = {
@@ -112,7 +114,7 @@ export function NetworkNodesPage() {
         description={
           topology
             ? `${topology.domain} · Docker 网络 ${topology.dockerNetwork}`
-            : '查看 Peer、Orderer 和证书颁发机构的 Docker 状态。'
+            : '查看 Peer、Orderer、CouchDB 和证书颁发机构的 Docker 状态。'
         }
         refreshing={nodesQuery.isFetching || topologyQuery.isFetching}
         onRefresh={refresh}

@@ -8,7 +8,7 @@ export const NetworkNodeIdSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/, 'Use a valid configured container name.');
 
-export const NetworkNodeTypeSchema = z.enum(['peer', 'orderer', 'ca']);
+export const NetworkNodeTypeSchema = z.enum(['peer', 'orderer', 'ca', 'couchdb']);
 export const NetworkOrganizationTypeSchema = z.enum(['peer', 'orderer']);
 export const NetworkEndpointKindSchema = z.enum([
   'grpc',
@@ -16,6 +16,7 @@ export const NetworkEndpointKindSchema = z.enum([
   'operations',
   'metrics',
   'ca',
+  'couchdb',
 ]);
 export const NetworkEndpointProtocolSchema = z.enum(['grpc', 'grpcs', 'http', 'https']);
 

@@ -449,6 +449,7 @@ channels:
       });
       assert.equal(configResponse.statusCode, 200);
       assert.equal(configResponse.json().networkName, 'network-a-docker');
+      assert.equal(configResponse.json().stateDatabase, 'leveldb');
       assert.equal(configResponse.json().channels[0].name, 'channel-a');
       assert.doesNotMatch(configResponse.body, /never-return-this/);
 
@@ -661,6 +662,7 @@ channels:
           preferredPortStart: 30_000,
           fabricVersion: '3.1.4',
           fabricCaVersion: '1.5.19',
+          stateDatabase: 'couchdb',
         },
       });
       assert.equal(managedResponse.statusCode, 201);
@@ -673,7 +675,7 @@ channels:
         fabricVersion: '3.1.4',
         organizationCount: 2,
         channelCount: 2,
-        nodeCount: 8,
+        nodeCount: 11,
         updatedAt: managedResponse.json().updatedAt,
       });
       const managedConfigPath = path.join(
@@ -691,6 +693,9 @@ channels:
       assert.match(managedConfig, /fabric_version: 3\.1\.4/);
       assert.match(managedConfig, /fabric_ca_version: 1\.5\.19/);
       assert.match(managedConfig, /remove_docker_network_on_down: true/);
+      assert.match(managedConfig, /state_database: couchdb/);
+      assert.match(managedConfig, /couchdb_image: couchdb:3\.3\.3/);
+      assert.match(managedConfig, /couchdb_port: 30012/);
       assert.equal(
         readFileSync(
           path.join(temporaryRoot, 'managed-networks', 'managed-network', '.env'),
@@ -723,6 +728,31 @@ channels:
         ),
         false,
       );
+
+      const managedTopologyResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/managed-network/topology',
+      });
+      assert.equal(managedTopologyResponse.statusCode, 200);
+      const managedTopology = NetworkTopologyResponseSchema.parse(
+        managedTopologyResponse.json(),
+      );
+      assert.equal(managedTopology.nodes.length, 11);
+      assert.equal(
+        managedTopology.nodes.filter((node) => node.type === 'couchdb').length,
+        3,
+      );
+      assert(
+        managedTopology.nodes
+          .filter((node) => node.type === 'couchdb')
+          .every((node) => node.endpoints[0]?.kind === 'couchdb'),
+      );
+      const managedConfigurationResponse = await app.inject({
+        method: 'GET',
+        url: '/api/v1/networks/managed-network/config',
+      });
+      assert.equal(managedConfigurationResponse.statusCode, 200);
+      assert.equal(managedConfigurationResponse.json().stateDatabase, 'couchdb');
       assert.equal(
         existsSync(
           path.join(

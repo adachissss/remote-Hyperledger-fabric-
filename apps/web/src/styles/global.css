@@ -988,7 +988,7 @@ button:disabled {
 
 .managed-network-summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   background: var(--surface-raised);
   border: 1px solid var(--line);
 }
@@ -1179,6 +1179,73 @@ button:disabled {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.managed-database-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.managed-database-options button {
+  position: relative;
+  min-width: 0;
+  min-height: 94px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  gap: 5px 10px;
+  padding: 16px;
+  color: var(--muted);
+  text-align: left;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.managed-database-options button:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+}
+
+.managed-database-options button.is-active {
+  background: linear-gradient(135deg, #ffffff 0%, #eef8f5 100%);
+  border-color: rgba(8, 127, 105, 0.38);
+  box-shadow: inset 3px 0 0 var(--cyan);
+}
+
+.managed-database-options__signal {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.managed-database-options button.is-active .managed-database-options__signal {
+  border-color: var(--cyan);
+  background: var(--cyan);
+  box-shadow: 0 0 0 4px var(--cyan-soft);
+}
+
+.managed-database-options strong,
+.managed-database-options small {
+  display: block;
+}
+
+.managed-database-options strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.managed-database-options small {
+  grid-column: 2;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.55;
 }
 
 .managed-port-control {
@@ -3240,6 +3307,7 @@ button:disabled {
   .managed-network-summary span:nth-child(3) { border-right: 0; }
   .managed-network-summary span:nth-child(-n + 3) { border-bottom: 1px solid var(--line); }
   .managed-channel-row { grid-template-columns: 1fr; }
+  .managed-database-options { grid-template-columns: 1fr; }
   .managed-port-control { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .operations-workbench { grid-template-columns: 1fr; }
   .job-list { max-height: 230px; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--line); }
