@@ -2254,6 +2254,14 @@ button:disabled {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 600;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.danger-action:hover:not(:disabled) {
+  background: #a93630;
+  box-shadow: 0 12px 26px rgba(199, 67, 58, 0.2);
+  transform: translateY(-2px);
 }
 
 .operations-notice {
@@ -2343,6 +2351,54 @@ button:disabled {
   background: rgba(199, 67, 58, 0.07);
   border-color: rgba(199, 67, 58, 0.18);
 }
+
+.network-delete-zone {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px 18px 24px;
+  background:
+    linear-gradient(90deg, rgba(199, 67, 58, 0.055), transparent 42%),
+    rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(199, 67, 58, 0.2);
+  box-shadow: 0 14px 34px rgba(78, 38, 35, 0.055);
+  overflow: hidden;
+}
+
+.network-delete-zone::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  content: '';
+  background: var(--danger);
+}
+
+.network-delete-zone__signal {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+  background: rgba(199, 67, 58, 0.075);
+  border: 1px solid rgba(199, 67, 58, 0.18);
+}
+
+.network-delete-zone h2 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.network-delete-zone p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.network-delete-zone__action { min-width: 126px; }
 
 .active-job-strip {
   min-height: 64px;
@@ -3407,6 +3463,8 @@ button:disabled {
   .configuration-channel-row > div:last-child { grid-column: 2; justify-content: flex-start; }
   .operation-action-grid { grid-template-columns: 1fr; }
   .operation-action { min-height: 108px; }
+  .network-delete-zone { grid-template-columns: auto minmax(0, 1fr); }
+  .network-delete-zone__action { grid-column: 1 / -1; width: 100%; }
   .active-job-strip { grid-template-columns: auto minmax(0, 1fr); }
   .active-job-strip .secondary-action { grid-column: 1 / -1; }
   .job-console { padding: 14px; }

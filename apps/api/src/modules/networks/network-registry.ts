@@ -30,6 +30,7 @@ export interface NetworkRegistry {
   listReservedPorts(): Promise<number[]>;
   get(id: string): Promise<RegisteredNetwork | null>;
   create(network: RegisteredNetwork, reservedPorts?: number[]): Promise<NetworkSummary>;
+  delete(id: string): Promise<boolean>;
   close(): Promise<void>;
 }
 
@@ -176,6 +177,13 @@ class SqliteNetworkRegistry implements NetworkRegistry {
     }
 
     return toNetworkSummary(network);
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.#database.transaction(() => {
+      const result = this.#database.prepare('DELETE FROM networks WHERE id = ?').run(id);
+      return result.changes === 1;
+    })();
   }
 
   async close(): Promise<void> {

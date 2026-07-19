@@ -33,7 +33,10 @@ if [[ -n "${COMPOSE_PROJECT_NAME:-}" && "$CONFIGURED_COMPOSE_PROJECT" != "null" 
     exit 1
 fi
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$CONFIGURED_COMPOSE_PROJECT}"
-REMOVE_DOCKER_NETWORK_ON_DOWN=$(get_config_value_raw '.network.remove_docker_network_on_down // false')
+CONFIG_REMOVE_DOCKER_NETWORK_ON_DOWN=$(get_config_value_raw '.network.remove_docker_network_on_down // false')
+REMOVE_DOCKER_NETWORK_ON_DOWN="${REMOVE_DOCKER_NETWORK_ON_DOWN:-$CONFIG_REMOVE_DOCKER_NETWORK_ON_DOWN}"
+CONFIG_REMOVE_CHAINCODE_IMAGES_ON_DOWN=$(get_config_value_raw '.network.remove_chaincode_images_on_down // false')
+REMOVE_CHAINCODE_IMAGES_ON_DOWN="${REMOVE_CHAINCODE_IMAGES_ON_DOWN:-$CONFIG_REMOVE_CHAINCODE_IMAGES_ON_DOWN}"
 
 [[ -n "$FABRIC_NET_ID" && "$FABRIC_NET_ID" != "null" ]] || {
     error "未在配置中读取到 .network.id"
@@ -48,7 +51,7 @@ REMOVE_DOCKER_NETWORK_ON_DOWN=$(get_config_value_raw '.network.remove_docker_net
     exit 1
 }
 
-[[ ${#CHANNEL_NAMES[@]} -gt 0 ]] || {
+[[ "${1:-}" != "up" || ${#CHANNEL_NAMES[@]} -gt 0 ]] || {
     error "网络配置至少需要一个通道"
     exit 1
 }
@@ -163,6 +166,198 @@ fix_generated_ownership() {
         sudo chown -R "$owner" "${PROJECT_ROOT}/organizations" || true
     else
         warn "无法修正 organizations 目录权限：当前用户无 chown 权限且未安装 sudo"
+    fi
+}
+
+get_configured_peer_hosts() {
+    local env_prefix org domain peer_count peer_index configured_host
+
+    env_prefix=$(get_config_value_raw '.network.env_prefix // .network.name')
+    while IFS= read -r org; do
+        [[ -n "$org" ]] || continue
+        domain=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .domain")
+        peer_count=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peer_count")
+        for ((peer_index=0; peer_index<peer_count; peer_index++)); do
+            configured_host=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${org}\") | .peers[${peer_index}].host // .anchor_peers[${peer_index}].host // empty")
+            echo "${configured_host:-${env_prefix}-peer${peer_index}.${domain}}" | tr '[:upper:]' '[:lower:]'
+        done
+    done < <(get_peer_org_names)
+}
+
+list_target_container_ids() {
+    local container_id container_name compose_project chaincode_type network_attached peer_host
+    local owned
+    local candidates=()
+    local peer_hosts=()
+    declare -A seen_candidates=()
+
+    mapfile -t peer_hosts < <(get_configured_peer_hosts)
+    mapfile -t candidates < <(
+        {
+            docker ps -aq --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}"
+            docker ps -aq --filter "label=org.hyperledger.fabric.chaincode.type=NODE"
+            for peer_host in "${peer_hosts[@]}"; do
+                docker ps -aq --filter "name=dev-${peer_host}-"
+            done
+        } | awk 'NF && !seen[$0]++'
+    )
+
+    for container_id in "${candidates[@]}"; do
+        [[ -n "$container_id" && -z "${seen_candidates[$container_id]:-}" ]] || continue
+        seen_candidates[$container_id]=1
+        container_name=$(docker inspect "$container_id" --format '{{.Name}}' 2>/dev/null || true)
+        container_name="${container_name#/}"
+        container_name=$(echo "$container_name" | tr '[:upper:]' '[:lower:]')
+        compose_project=$(docker inspect "$container_id" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+        chaincode_type=$(docker inspect "$container_id" --format '{{index .Config.Labels "org.hyperledger.fabric.chaincode.type"}}' 2>/dev/null || true)
+        network_attached=$(docker inspect "$container_id" --format "{{if index .NetworkSettings.Networks \"${FABRIC_DOCKER_NET}\"}}true{{else}}false{{end}}" 2>/dev/null || true)
+        owned=false
+
+        if [[ "$compose_project" == "$COMPOSE_PROJECT_NAME" ]]; then
+            owned=true
+        elif [[ "$chaincode_type" == "NODE" && "$network_attached" == "true" ]]; then
+            owned=true
+        else
+            for peer_host in "${peer_hosts[@]}"; do
+                if [[ "$container_name" == "dev-${peer_host}-"* ]]; then
+                    owned=true
+                    break
+                fi
+            done
+        fi
+
+        [[ "$owned" == "true" ]] && echo "$container_id"
+    done
+}
+
+list_target_chaincode_image_ids() {
+    local container_id container_name chaincode_type image_id repository peer_host repo_tags
+    local is_chaincode target_tag
+    local peer_hosts=()
+    declare -A seen_images=()
+
+    mapfile -t peer_hosts < <(get_configured_peer_hosts)
+    for container_id in "$@"; do
+        container_name=$(docker inspect "$container_id" --format '{{.Name}}' 2>/dev/null || true)
+        container_name="${container_name#/}"
+        container_name=$(echo "$container_name" | tr '[:upper:]' '[:lower:]')
+        chaincode_type=$(docker inspect "$container_id" --format '{{index .Config.Labels "org.hyperledger.fabric.chaincode.type"}}' 2>/dev/null || true)
+        is_chaincode=false
+        if [[ "$chaincode_type" == "NODE" ]]; then
+            is_chaincode=true
+        else
+            for peer_host in "${peer_hosts[@]}"; do
+                if [[ "$container_name" == "dev-${peer_host}-"* ]]; then
+                    is_chaincode=true
+                    break
+                fi
+            done
+        fi
+        [[ "$is_chaincode" == "true" ]] || continue
+
+        image_id=$(docker inspect "$container_id" --format '{{.Image}}' 2>/dev/null || true)
+        [[ -n "$image_id" && -z "${seen_images[$image_id]:-}" ]] || continue
+        repo_tags=$(docker image inspect "$image_id" --format '{{json .RepoTags}}' 2>/dev/null || true)
+        target_tag=false
+        if [[ "$repo_tags" == "[]" || "$repo_tags" == "null" ]]; then
+            target_tag=true
+        else
+            repo_tags=$(echo "$repo_tags" | tr '[:upper:]' '[:lower:]')
+            for peer_host in "${peer_hosts[@]}"; do
+                if [[ "$repo_tags" == *"dev-${peer_host}-"* ]]; then
+                    target_tag=true
+                    break
+                fi
+            done
+        fi
+        if [[ "$target_tag" == "true" ]]; then
+            seen_images[$image_id]=1
+            echo "$image_id"
+        fi
+    done
+
+    while IFS='|' read -r repository image_id; do
+        [[ -n "$repository" && "$repository" != "<none>" ]] || continue
+        repository=$(echo "$repository" | tr '[:upper:]' '[:lower:]')
+        for peer_host in "${peer_hosts[@]}"; do
+            if [[ "$repository" == "dev-${peer_host}-"* && -z "${seen_images[$image_id]:-}" ]]; then
+                seen_images[$image_id]=1
+                echo "$image_id"
+                break
+            fi
+        done
+    done < <(docker images -a --format '{{.Repository}}|{{.ID}}')
+}
+
+remove_target_chaincode_images() {
+    local image_id pass remaining=0
+    local image_ids=("$@")
+
+    [[ ${#image_ids[@]} -gt 0 ]] || return 0
+    info "===== 删除本网络链码构建镜像 ====="
+    for pass in 1 2; do
+        for image_id in "${image_ids[@]}"; do
+            docker image inspect "$image_id" >/dev/null 2>&1 || continue
+            docker image rm "$image_id" >/dev/null 2>&1 || true
+        done
+    done
+    for image_id in "${image_ids[@]}"; do
+        if docker image inspect "$image_id" >/dev/null 2>&1; then
+            remaining=$((remaining + 1))
+        fi
+    done
+    if (( remaining > 0 )); then
+        warn "${remaining} 个链码镜像仍被其他资源引用，已保留"
+    fi
+}
+
+remove_target_compose_volumes() {
+    local volume_name
+    local volumes=()
+
+    mapfile -t volumes < <(docker volume ls -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}")
+    for volume_name in "${volumes[@]}"; do
+        if ! docker volume rm "$volume_name" >/dev/null; then
+            error "无法删除本网络 Docker volume: $volume_name"
+            return 1
+        fi
+    done
+}
+
+cleanup_docker_resources() {
+    local target_container_ids=()
+    local target_image_ids=()
+    local remaining_container_ids=()
+
+    mapfile -t target_container_ids < <(list_target_container_ids)
+    if [[ ${#target_container_ids[@]} -gt 0 ]]; then
+        info "===== 删除本网络残留容器（${#target_container_ids[@]} 个） ====="
+        if [[ "$REMOVE_CHAINCODE_IMAGES_ON_DOWN" == "true" ]]; then
+            mapfile -t target_image_ids < <(list_target_chaincode_image_ids "${target_container_ids[@]}")
+        fi
+        docker rm -f -v "${target_container_ids[@]}" >/dev/null
+    elif [[ "$REMOVE_CHAINCODE_IMAGES_ON_DOWN" == "true" ]]; then
+        mapfile -t target_image_ids < <(list_target_chaincode_image_ids)
+    fi
+
+    remove_target_compose_volumes
+
+    mapfile -t remaining_container_ids < <(list_target_container_ids)
+    if [[ ${#remaining_container_ids[@]} -gt 0 ]]; then
+        error "本网络仍有 ${#remaining_container_ids[@]} 个容器未删除"
+        return 1
+    fi
+
+    if [[ "$REMOVE_CHAINCODE_IMAGES_ON_DOWN" == "true" ]]; then
+        remove_target_chaincode_images "${target_image_ids[@]}"
+    fi
+
+    if [[ "$REMOVE_DOCKER_NETWORK_ON_DOWN" == "true" ]] && docker network inspect "$FABRIC_DOCKER_NET" >/dev/null 2>&1; then
+        info "===== 删除本网络 Docker network ====="
+        if ! docker network rm "$FABRIC_DOCKER_NET" >/dev/null; then
+            error "Docker network 仍被占用，删除失败: $FABRIC_DOCKER_NET"
+            return 1
+        fi
     fi
 }
 
@@ -302,10 +497,7 @@ do_down() {
         docker compose -f docker-compose-ca.yaml down -v || true
     fi
 
-    if [[ "$REMOVE_DOCKER_NETWORK_ON_DOWN" == "true" ]] && docker network inspect "$FABRIC_DOCKER_NET" >/dev/null 2>&1; then
-        info "===== 删除本网络 Docker network ====="
-        docker network rm "$FABRIC_DOCKER_NET" >/dev/null || warn "Docker network 仍被占用，未删除: $FABRIC_DOCKER_NET"
-    fi
+    cleanup_docker_resources
 
     info "===== 删除组织证书与通道文件 ====="
     cd "$PROJECT_ROOT"
@@ -332,6 +524,9 @@ case "${1:-}" in
         ;;
     down)
         do_down
+        ;;
+    cleanup-docker)
+        cleanup_docker_resources
         ;;
     *)
         echo

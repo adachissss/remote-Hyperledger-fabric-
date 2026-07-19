@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, realpath, stat } from 'node:fs/promises';
+import { access, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -9,6 +9,7 @@ import type {
   JobStatus,
   JobSummary,
   NetworkLifecycleAction,
+  NetworkScriptAction,
   CreateChaincodeDeploymentRequest,
 } from '@plus-fabric/shared';
 
@@ -28,6 +29,10 @@ type JobProcessSpec = {
   environment: Record<string, string>;
   timeoutMs: number;
   failureMessage: string;
+  onSuccess?: (
+    log: (message: string) => Promise<void>,
+    signal: AbortSignal,
+  ) => Promise<void>;
 };
 
 export class JobServiceError extends Error {
@@ -50,6 +55,8 @@ export class JobService {
     private readonly jobRegistry: JobRegistry,
     private readonly networkRegistry: NetworkRegistry,
     private readonly processRunner: ProcessRunner,
+    private readonly managedNetworkRoot: string,
+    private readonly driverTemplateRoot: string,
   ) {}
 
   async initialize(): Promise<void> {
@@ -75,7 +82,7 @@ export class JobService {
 
   async createNetworkAction(
     networkId: string,
-    action: NetworkLifecycleAction,
+    action: NetworkScriptAction,
     confirmation?: string,
   ): Promise<Job> {
     const network = await this.networkRegistry.get(networkId);
@@ -86,7 +93,28 @@ export class JobService {
         404,
       );
     }
-    if (action === 'down' && confirmation !== networkId) {
+    return this.#createNetworkJob(network, action, action, confirmation);
+  }
+
+  async createNetworkDeletion(networkId: string, confirmation?: string): Promise<Job> {
+    const network = await this.networkRegistry.get(networkId);
+    if (!network) {
+      throw new JobServiceError(
+        'network_not_found',
+        `Network "${networkId}" is not registered.`,
+        404,
+      );
+    }
+    return this.#createNetworkJob(network, 'delete', 'down', confirmation);
+  }
+
+  async #createNetworkJob(
+    network: NonNullable<Awaited<ReturnType<NetworkRegistry['get']>>>,
+    action: NetworkLifecycleAction,
+    scriptAction: NetworkScriptAction,
+    confirmation?: string,
+  ): Promise<Job> {
+    if ((action === 'down' || action === 'delete') && confirmation !== network.id) {
       throw new JobServiceError(
         'network_confirmation_required',
         'The network id confirmation does not match.',
@@ -111,7 +139,7 @@ export class JobService {
       created = await this.jobRegistry.createNetworkLifecycleJob({
         id: randomUUID(),
         stepId: randomUUID(),
-        networkId,
+        networkId: network.id,
         action,
         actor: 'local-user',
         createdAt,
@@ -130,14 +158,21 @@ export class JobService {
       created.job,
       {
         executable,
-        args: [action],
+        args: [scriptAction],
         cwd: network.workspaceRoot,
         environment: {
           CONFIG_FILE: network.configPath,
           COMPOSE_PROJECT_NAME: network.composeProject,
+          ...(action === 'delete' ? { REMOVE_CHAINCODE_IMAGES_ON_DOWN: 'true' } : {}),
         },
         timeoutMs: timeoutFor(action),
         failureMessage: '原网络脚本',
+        ...(action === 'delete'
+          ? { onSuccess: async (
+              log: (message: string) => Promise<void>,
+              signal: AbortSignal,
+            ) => this.#finalizeNetworkDeletion(network, log, signal) }
+          : {}),
       },
       controller,
     ).finally(() => {
@@ -298,6 +333,16 @@ export class JobService {
   ): Promise<void> {
     const step = job.steps[0];
     if (!step) throw new Error(`Job "${job.id}" does not contain an executable step.`);
+    const logSystem = async (message: string): Promise<void> => {
+      const event = await this.jobRegistry.appendLog(
+        job.id,
+        step.id,
+        'system',
+        message,
+        new Date().toISOString(),
+      );
+      this.#emit([event]);
+    };
 
     try {
       this.#emit(await this.jobRegistry.markRunning(job.id, new Date().toISOString()));
@@ -325,6 +370,7 @@ export class JobService {
       } else if (result.cancelled) {
         await this.#finish(job.id, 'cancelled', result.exitCode, null);
       } else if (result.exitCode === 0) {
+        await spec.onSuccess?.(logSystem, controller.signal);
         await this.#finish(job.id, 'succeeded', 0, null);
       } else {
         await this.#finish(
@@ -342,6 +388,47 @@ export class JobService {
         error instanceof Error ? error.message : '执行作业脚本时发生未知错误。',
       ).catch(() => undefined);
     }
+  }
+
+  async #finalizeNetworkDeletion(
+    network: NonNullable<Awaited<ReturnType<NetworkRegistry['get']>>>,
+    log: (message: string) => Promise<void>,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await log('原网络脚本执行完成，正在核验目标 Docker 资源。');
+    const cleanupResult = await this.processRunner.run({
+      executable: path.join(this.driverTemplateRoot, 'network.sh'),
+      args: ['cleanup-docker'],
+      cwd: this.driverTemplateRoot,
+      environment: {
+        CONFIG_FILE: network.configPath,
+        ALLOW_EXTERNAL_CONFIG_FILE: 'true',
+        COMPOSE_PROJECT_NAME: network.composeProject,
+        REMOVE_DOCKER_NETWORK_ON_DOWN: 'true',
+        REMOVE_CHAINCODE_IMAGES_ON_DOWN: 'true',
+      },
+      timeoutMs: 5 * 60_000,
+      signal,
+      onLine: ({ message }) => log(message),
+    });
+    if (cleanupResult.timedOut) throw new Error('目标 Docker 资源核验清理超时。');
+    if (cleanupResult.cancelled) throw new Error('目标 Docker 资源核验清理已取消。');
+    if (cleanupResult.exitCode !== 0) {
+      throw new Error(`目标 Docker 资源核验清理失败，退出码 ${cleanupResult.exitCode ?? '未知'}。`);
+    }
+
+    await log('目标 Docker 资源已确认清理，正在从控制平面删除网络。');
+    if (network.managementMode === 'managed') {
+      await removeManagedWorkspace(this.managedNetworkRoot, network.id, network.workspaceRoot);
+      await log('托管网络工作区已删除。');
+    } else {
+      await log('导入网络的外部工作区已保留。');
+    }
+
+    if (!(await this.networkRegistry.delete(network.id))) {
+      throw new Error(`网络 "${network.id}" 的注册记录已不存在。`);
+    }
+    await log('网络注册记录与保留端口已释放。');
   }
 
   async #finish(
@@ -392,11 +479,44 @@ async function resolveWorkspaceEntry(
   }
 }
 
+async function removeManagedWorkspace(
+  managedNetworkRoot: string,
+  networkId: string,
+  workspaceRoot: string,
+): Promise<void> {
+  const expectedWorkspace = path.resolve(managedNetworkRoot, networkId);
+  if (path.resolve(workspaceRoot) !== expectedWorkspace) {
+    throw new Error('托管网络工作区与配置的 managed root 不一致，拒绝删除。');
+  }
+
+  let resolvedWorkspace: string;
+  try {
+    resolvedWorkspace = await realpath(expectedWorkspace);
+  } catch (error) {
+    if (isMissingPathError(error)) return;
+    throw error;
+  }
+  const resolvedManagedRoot = await realpath(managedNetworkRoot);
+  if (path.relative(resolvedManagedRoot, resolvedWorkspace) !== networkId) {
+    throw new Error('托管网络工作区解析到 managed root 之外，拒绝删除。');
+  }
+  await rm(resolvedWorkspace, { recursive: true, force: false });
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
+}
+
 function timeoutFor(action: NetworkLifecycleAction): number {
   switch (action) {
     case 'up':
       return 60 * 60_000;
     case 'down':
+    case 'delete':
       return 15 * 60_000;
     case 'stop':
     case 'restart':

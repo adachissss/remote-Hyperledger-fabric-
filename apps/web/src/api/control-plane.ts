@@ -40,7 +40,7 @@ import {
   type RedactedNetworkConfiguration,
   type NetworkSummary,
   type NetworkTopologyResponse,
-  type NetworkLifecycleAction,
+  type NetworkScriptAction,
 } from '@plus-fabric/shared';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -257,7 +257,7 @@ export async function getJobEvents(jobId: string, afterId = 0): Promise<JobEvent
 
 export async function createNetworkAction(request: {
   networkId: string;
-  action: NetworkLifecycleAction;
+  action: NetworkScriptAction;
   confirmation?: string;
 }): Promise<Job> {
   return JobSchema.parse(
@@ -270,6 +270,18 @@ export async function createNetworkAction(request: {
         ),
       },
     ),
+  );
+}
+
+export async function deleteNetwork(request: {
+  networkId: string;
+  confirmation: string;
+}): Promise<Job> {
+  return JobSchema.parse(
+    await requestJson(`/api/v1/networks/${encodeURIComponent(request.networkId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: request.confirmation }),
+    }),
   );
 }
 

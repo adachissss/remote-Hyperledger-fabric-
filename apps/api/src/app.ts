@@ -87,6 +87,8 @@ export async function buildApp(
     jobRegistry,
     networkRegistry,
     dependencies.processRunner ?? new NodeProcessRunner(),
+    config.managedNetworkRoot,
+    config.driverTemplateRoot,
   );
   await jobService.initialize();
   const ledgerRuntime = dependencies.ledgerRuntime ?? new FabricCliLedgerRuntime();

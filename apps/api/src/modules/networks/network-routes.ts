@@ -5,7 +5,7 @@ import {
   NetworkIdSchema,
   NetworkListResponseSchema,
   NetworkNodeIdSchema,
-  NetworkLifecycleActionSchema,
+  NetworkScriptActionSchema,
   type NetworkListResponse,
 } from '@plus-fabric/shared';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
@@ -132,7 +132,7 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
     const networkId = parseNetworkId(request.params, reply);
     if (!networkId) return;
 
-    const action = NetworkLifecycleActionSchema.safeParse(
+    const action = NetworkScriptActionSchema.safeParse(
       (request.params as { action?: unknown }).action,
     );
     if (!action.success) {
@@ -154,6 +154,30 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
       const job = await options.jobService.createNetworkAction(
         networkId,
         action.data,
+        body.data.confirmation,
+      );
+      return reply.code(202).send(job);
+    } catch (error) {
+      return sendNetworkError(error, reply);
+    }
+  });
+
+  app.delete('/:networkId', async (request, reply) => {
+    const networkId = parseNetworkId(request.params, reply);
+    if (!networkId) return;
+
+    const body = CreateNetworkActionRequestSchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        message: 'The network deletion request is invalid.',
+        issues: body.error.issues,
+      });
+    }
+
+    try {
+      const job = await options.jobService.createNetworkDeletion(
+        networkId,
         body.data.confirmation,
       );
       return reply.code(202).send(job);

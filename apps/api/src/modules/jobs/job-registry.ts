@@ -219,7 +219,10 @@ class SqliteJobRegistry implements JobRegistry {
       actor: input.actor,
       createdAt: input.createdAt,
       context: {},
-      stepName: `network.sh ${input.action}`,
+      stepName:
+        input.action === 'delete'
+          ? 'network.sh down + 删除网络注册'
+          : `network.sh ${input.action}`,
     });
   }
 

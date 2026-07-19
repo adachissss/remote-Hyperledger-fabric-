@@ -48,6 +48,7 @@
 - [x] SSE 实时日志与历史事件重放；
 - [x] up、stop、restart；
 - [x] 带网络 ID 确认的 down，只清理目标网络的容器、卷、Docker network、hosts 映射和工作区运行产物；
+- [x] 彻底删除网络，回收链码 builder/runtime 残留、注册端口和 managed workspace，保留 imported workspace 与作业历史；
 - [x] 网络级锁、超时、取消、异常重启恢复和本地作业记录；
 - [x] Operations 页面、步骤状态与实时日志控制台。
 

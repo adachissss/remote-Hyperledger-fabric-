@@ -117,6 +117,7 @@ const networkActionLabels: Record<NetworkLifecycleAction, string> = {
   stop: '停止网络',
   restart: '恢复网络',
   down: '清理网络',
+  delete: '彻底删除网络',
 };
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {

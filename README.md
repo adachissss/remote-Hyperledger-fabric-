@@ -38,7 +38,9 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 
 导入包含可执行 `network.sh` 的工作区后，可以从网络详情的“运维”页面执行 `up`、`stop`、`restart` 和 `down`。控制平面会继续调用原脚本，并使用注册时保存的工作区、配置文件和 Compose project；原有命令行方式不受影响。作业步骤、退出码和实时日志保存在本地 SQLite 中，同一网络不会并发执行两个生命周期操作。
 
-`down` 只会删除目标网络工作区对应的容器、卷、组织材料、通道产物、Docker network 和分段 `/etc/hosts` 映射，不会清理其他已注册网络；网页端需要输入网络 ID 确认。也可以继续进入该网络工作区直接执行 `./network.sh down`。
+`down` 只会删除目标网络工作区对应的 Compose 容器、Fabric 链码构建/运行容器、卷、组织材料、通道产物、Docker network 和分段 `/etc/hosts` 映射，不会清理其他已注册网络；网页端需要输入网络 ID 确认。如果目标网络仍被容器占用，作业会明确失败，不再静默跳过。也可以继续进入该网络工作区直接执行 `./network.sh down`。
+
+运维页面还提供独立的“彻底删除网络”：它先执行上述 `down`，并清理目标网络的链码构建镜像；成功后释放 SQLite 注册记录和宿主机端口。平台管理的网络还会删除 `runtime/networks/<network-id>` 工作区；导入网络只从控制平面注销，外部工作区保持不变。删除作业完成后仍保留历史日志，便于核对清理结果。
 
 网络运行后，可以从网络详情的“账本”页面动态发现 Peer 已加入的通道、查看账本高度、分页浏览历史区块，并展开交易明文。后端通过 Peer QSCC 读取最终提交的区块，使用 `fabric-protos` 递归解析交易验证结果、Creator、链码函数与参数、背书、响应、事件和公共读写集。JSON/UTF-8 值提供明文与 base64 原值双视图；transient 数据和私有集合明文不在公共区块中，页面只展示可验证的私有集合哈希摘要。
 
@@ -50,6 +52,7 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 - 托管网络独立工作区、Docker network、Compose project、容器/卷命名空间和宿主机端口规划；
 - 多网络注册、配置、拓扑和节点运行状态查看；
 - `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
+- 目标化网络清理与彻底删除，回收链码残留容器、Docker network、注册端口和托管工作区；
 - 动态通道发现、账本高度、区块分页和 Fabric protobuf 明文解析；
 - 已安装包与已提交链码清单、通用部署作业以及 evaluate/submit 执行台；
 - 默认简体中文的亮色 Web 控制台。
@@ -108,7 +111,7 @@ cp config/orgs.example.yaml config/orgs.yaml
 ./network.sh up       # 首次生成并启动网络
 ./network.sh stop     # 暂停容器，保留全部状态
 ./network.sh restart  # 恢复已有容器和账本
-./network.sh down     # 删除容器卷、组织材料和通道文件
+./network.sh down     # 删除本网络容器、卷、Docker network、组织材料和通道文件
 ```
 
 `up` 会依次生成 CA、组织证书、Compose、通道配置和 Peer `core.yaml`，再启动节点并将配置中的 Orderer 与 Peer 加入各自通道。

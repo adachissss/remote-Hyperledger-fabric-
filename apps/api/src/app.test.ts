@@ -315,6 +315,205 @@ test('network import is disabled until an administrator allows workspace roots',
   }
 });
 
+test('network deletion cleans managed registrations while preserving imported workspaces', async () => {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'plus-fabric-delete-'));
+  const managedNetworkRoot = path.join(temporaryRoot, 'managed-networks');
+  const importedWorkspace = path.join(temporaryRoot, 'imported-network');
+  mkdirSync(path.join(importedWorkspace, 'config'), { recursive: true });
+  writeFileSync(
+    path.join(importedWorkspace, 'config', 'orgs.yaml'),
+    `
+network:
+  name: imported-delete-docker
+  domain: imported-delete.test
+  tls_enabled: true
+ordererOrg:
+  mspid: OrdererMSP
+  domain: imported-delete.test
+  ca_url: https://localhost:39054
+  ca_name: ca-orderer
+  nodes:
+    - name: orderer1
+      host: orderer1.imported-delete.test
+      port: 39050
+peerOrgs:
+  - name: org1
+    mspid: Org1MSP
+    domain: org1.imported-delete.test
+    ca_url: https://localhost:39154
+    ca_name: ca-org1
+    peer_count: 1
+    anchor_peers:
+      - host: peer0.org1.imported-delete.test
+        port: 39151
+channels:
+  - name: delete-channel
+    profile: ApplicationChannel
+    memberOrgs: [org1]
+`,
+  );
+  writeFileSync(path.join(importedWorkspace, 'network.sh'), '#!/usr/bin/env bash\nexit 0\n');
+  chmodSync(path.join(importedWorkspace, 'network.sh'), 0o755);
+
+  const deletionCalls: Array<{ args: string[]; environment: Record<string, string> }> = [];
+  const deletionProcessRunner: ProcessRunner = {
+    async run(request) {
+      deletionCalls.push({ args: request.args, environment: request.environment });
+      assert.equal(request.environment.REMOVE_CHAINCODE_IMAGES_ON_DOWN, 'true');
+      if (request.args[0] === 'cleanup-docker') {
+        assert.equal(request.environment.ALLOW_EXTERNAL_CONFIG_FILE, 'true');
+        assert.equal(request.environment.REMOVE_DOCKER_NETWORK_ON_DOWN, 'true');
+        await request.onLine({ stream: 'stdout', message: 'target Docker namespace verified' });
+        return { exitCode: 0, signal: null, cancelled: false, timedOut: false };
+      }
+      assert.deepEqual(request.args, ['down']);
+      await request.onLine({ stream: 'stdout', message: 'target network resources removed' });
+      return {
+        exitCode: request.environment.COMPOSE_PROJECT_NAME === 'pf_managed_failure' ? 1 : 0,
+        signal: null,
+        cancelled: false,
+        timedOut: false,
+      };
+    },
+  };
+  const config = createTestConfig({
+    CONTROL_PLANE_ALLOWED_NETWORK_ROOTS: temporaryRoot,
+    CONTROL_PLANE_DATABASE_PATH: path.join(temporaryRoot, 'control-plane.sqlite'),
+    CONTROL_PLANE_MANAGED_NETWORK_ROOT: managedNetworkRoot,
+  });
+  const app = await buildApp(config, {
+    processRunner: deletionProcessRunner,
+    hostPortProbe: availableHostPortProbe,
+    managedNamespaceProbe: { async assertAvailable() {} },
+  });
+
+  try {
+    const managedCreateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/networks',
+      payload: {
+        id: 'managed-delete',
+        displayName: 'Managed Delete',
+        domain: 'managed-delete.test',
+        ordererCount: 1,
+        peerOrganizations: [{ name: 'org1', mspId: 'Org1MSP', peerCount: 1 }],
+        channels: [{ name: 'delete-channel', memberOrganizations: ['org1'] }],
+        preferredPortStart: 34_000,
+      },
+    });
+    assert.equal(managedCreateResponse.statusCode, 201, managedCreateResponse.body);
+    const managedWorkspace = path.join(managedNetworkRoot, 'managed-delete');
+    assert.equal(existsSync(managedWorkspace), true);
+
+    const unsafeDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/networks/managed-delete',
+      payload: {},
+    });
+    assert.equal(unsafeDeleteResponse.statusCode, 400);
+    assert.equal(unsafeDeleteResponse.json().error, 'network_confirmation_required');
+
+    const managedDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/networks/managed-delete',
+      payload: { confirmation: 'managed-delete' },
+    });
+    assert.equal(managedDeleteResponse.statusCode, 202);
+    const managedDeleteJob = JobSchema.parse(managedDeleteResponse.json());
+    assert.equal(managedDeleteJob.action, 'delete');
+    await waitForJob(app, managedDeleteJob.id, 'succeeded');
+    assert.equal(existsSync(managedWorkspace), false);
+
+    const afterManagedDelete = NetworkListResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: '/api/v1/networks' })).json(),
+    );
+    assert.equal(afterManagedDelete.total, 0);
+
+    const replacementResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/networks',
+      payload: {
+        id: 'managed-replacement',
+        displayName: 'Managed Replacement',
+        domain: 'managed-replacement.test',
+        ordererCount: 1,
+        peerOrganizations: [{ name: 'org1', mspId: 'Org1MSP', peerCount: 1 }],
+        channels: [{ name: 'delete-channel', memberOrganizations: ['org1'] }],
+        preferredPortStart: 34_000,
+      },
+    });
+    assert.equal(replacementResponse.statusCode, 201, replacementResponse.body);
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/networks/import',
+      payload: {
+        id: 'imported-delete',
+        displayName: 'Imported Delete',
+        driver: 'fabric-compose',
+        workspaceRoot: importedWorkspace,
+        configPath: 'config/orgs.yaml',
+        composeProject: 'imported_delete',
+      },
+    });
+    assert.equal(importResponse.statusCode, 201, importResponse.body);
+
+    const importedDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/networks/imported-delete',
+      payload: { confirmation: 'imported-delete' },
+    });
+    const importedDeleteJob = JobSchema.parse(importedDeleteResponse.json());
+    await waitForJob(app, importedDeleteJob.id, 'succeeded');
+    assert.equal(existsSync(importedWorkspace), true);
+    assert.equal(deletionCalls.length, 4);
+
+    const importedEvents = JobEventListResponseSchema.parse(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/jobs/${importedDeleteJob.id}/events`,
+        })
+      ).json(),
+    );
+    assert(
+      importedEvents.items.some((event) => event.message === '导入网络的外部工作区已保留。'),
+    );
+
+    const failingCreateResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/networks',
+      payload: {
+        id: 'managed-failure',
+        displayName: 'Managed Failure',
+        domain: 'managed-failure.test',
+        ordererCount: 1,
+        peerOrganizations: [{ name: 'org1', mspId: 'Org1MSP', peerCount: 1 }],
+        channels: [{ name: 'failure-channel', memberOrganizations: ['org1'] }],
+        preferredPortStart: 35_000,
+      },
+    });
+    assert.equal(failingCreateResponse.statusCode, 201, failingCreateResponse.body);
+    const failingWorkspace = path.join(managedNetworkRoot, 'managed-failure');
+    const failingDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/networks/managed-failure',
+      payload: { confirmation: 'managed-failure' },
+    });
+    const failingDeleteJob = JobSchema.parse(failingDeleteResponse.json());
+    await waitForJob(app, failingDeleteJob.id, 'failed');
+    assert.equal(existsSync(failingWorkspace), true);
+    const afterFailedDelete = NetworkListResponseSchema.parse(
+      (await app.inject({ method: 'GET', url: '/api/v1/networks' })).json(),
+    );
+    assert(afterFailedDelete.items.some((network) => network.id === 'managed-failure'));
+    assert.equal(deletionCalls.length, 5);
+  } finally {
+    await app.close();
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
 test('an allowed Fabric workspace can be imported and read back without secrets', async () => {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'plus-fabric-registry-'));
   const workspaceRoot = path.join(temporaryRoot, 'network-a');

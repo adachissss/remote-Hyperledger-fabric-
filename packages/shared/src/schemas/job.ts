@@ -7,7 +7,8 @@ export const JobIdSchema = z.string().uuid();
 export const JobStepIdSchema = z.string().uuid();
 
 export const JobKindSchema = z.enum(['network-lifecycle', 'chaincode-deployment']);
-export const NetworkLifecycleActionSchema = z.enum(['up', 'stop', 'restart', 'down']);
+export const NetworkLifecycleActionSchema = z.enum(['up', 'stop', 'restart', 'down', 'delete']);
+export const NetworkScriptActionSchema = z.enum(['up', 'stop', 'restart', 'down']);
 export const JobActionSchema = z.union([
   NetworkLifecycleActionSchema,
   ChaincodeDeploymentActionSchema,
@@ -86,6 +87,7 @@ export const CreateNetworkActionRequestSchema = z.object({
 export type JobId = z.infer<typeof JobIdSchema>;
 export type JobKind = z.infer<typeof JobKindSchema>;
 export type NetworkLifecycleAction = z.infer<typeof NetworkLifecycleActionSchema>;
+export type NetworkScriptAction = z.infer<typeof NetworkScriptActionSchema>;
 export type JobAction = z.infer<typeof JobActionSchema>;
 export type JobContext = z.infer<typeof JobContextSchema>;
 export type JobStatus = z.infer<typeof JobStatusSchema>;

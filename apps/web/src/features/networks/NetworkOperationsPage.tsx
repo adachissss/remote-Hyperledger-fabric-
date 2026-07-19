@@ -1,7 +1,12 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { JobStatus, JobSummary, NetworkLifecycleAction } from '@plus-fabric/shared';
+import type {
+  JobStatus,
+  JobSummary,
+  NetworkLifecycleAction,
+  NetworkScriptAction,
+} from '@plus-fabric/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CircleAlert,
@@ -13,14 +18,16 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import {
   cancelJob,
   createNetworkAction,
+  deleteNetwork,
   getJob,
   getJobEvents,
   getJobs,
+  getNetworks,
   getNetworkTopology,
   subscribeToJobEvents,
 } from '../../api/control-plane';
@@ -35,7 +42,7 @@ import {
 import { NetworkDetailHeader } from './NetworkDetailHeader';
 
 const actions: Array<{
-  action: NetworkLifecycleAction;
+  action: NetworkScriptAction;
   title: string;
   description: string;
   icon: typeof Play;
@@ -73,11 +80,19 @@ const actions: Array<{
 
 export function NetworkOperationsPage() {
   const { networkId } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [downConfirmation, setDownConfirmation] = useState<string | null>(null);
+  const [confirmationAction, setConfirmationAction] = useState<'down' | 'delete' | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState('');
   const downButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const confirmDialogRef = useRef<HTMLElement>(null);
+  const networksQuery = useQuery({
+    queryKey: ['networks'],
+    queryFn: getNetworks,
+    staleTime: 30_000,
+  });
   const topologyQuery = useQuery({
     queryKey: ['network-topology', networkId],
     queryFn: () => getNetworkTopology(networkId!),
@@ -106,7 +121,15 @@ export function NetworkOperationsPage() {
     mutationFn: createNetworkAction,
     onSuccess: async (job) => {
       setSelectedJobId(job.id);
-      setDownConfirmation(null);
+      setConfirmationAction(null);
+      await queryClient.invalidateQueries({ queryKey: ['jobs', networkId] });
+    },
+  });
+  const deletionMutation = useMutation({
+    mutationFn: deleteNetwork,
+    onSuccess: async (job) => {
+      setSelectedJobId(job.id);
+      setConfirmationAction(null);
       await queryClient.invalidateQueries({ queryKey: ['jobs', networkId] });
     },
   });
@@ -148,14 +171,23 @@ export function NetworkOperationsPage() {
   }, [jobQuery.data?.status, networkId, queryClient, selectedJobId]);
 
   useEffect(() => {
-    if (downConfirmation === null) return;
+    if (confirmationAction === null) return;
+    const returnFocus = confirmationAction === 'delete' ? deleteButtonRef : downButtonRef;
     confirmDialogRef.current?.querySelector<HTMLInputElement>('input')?.focus();
-    return () => downButtonRef.current?.focus();
-  }, [downConfirmation === null]);
+    return () => returnFocus.current?.focus();
+  }, [confirmationAction]);
+
+  useEffect(() => {
+    if (jobQuery.data?.action !== 'delete' || jobQuery.data.status !== 'succeeded') return;
+    void queryClient.invalidateQueries({ queryKey: ['networks'] }).then(() => {
+      navigate('/networks', { replace: true });
+    });
+  }, [jobQuery.data?.action, jobQuery.data?.status, navigate, queryClient]);
 
   if (!networkId) return <Navigate to="/networks" replace />;
 
-  const startAction = (action: NetworkLifecycleAction, confirmation?: string) => {
+  const networkSummary = networksQuery.data?.items.find((network) => network.id === networkId);
+  const startAction = (action: NetworkScriptAction, confirmation?: string) => {
     actionMutation.reset();
     actionMutation.mutate({
       networkId,
@@ -165,6 +197,7 @@ export function NetworkOperationsPage() {
   };
   const refresh = () => {
     void Promise.all([
+      networksQuery.refetch(),
       topologyQuery.refetch(),
       jobsQuery.refetch(),
       selectedJobId ? jobQuery.refetch() : Promise.resolve(),
@@ -174,7 +207,7 @@ export function NetworkOperationsPage() {
   const handleConfirmDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      setDownConfirmation(null);
+      setConfirmationAction(null);
       return;
     }
     if (event.key !== 'Tab') return;
@@ -205,6 +238,7 @@ export function NetworkOperationsPage() {
         title="网络运维"
         description="从网页执行原有 network.sh，命令行启动方式保持不变。"
         refreshing={
+          networksQuery.isFetching ||
           topologyQuery.isFetching ||
           jobsQuery.isFetching ||
           jobQuery.isFetching ||
@@ -227,11 +261,12 @@ export function NetworkOperationsPage() {
             className={`operation-action operation-action--${tone}`}
             type="button"
             key={action}
-            disabled={Boolean(activeJob) || actionMutation.isPending}
+            disabled={Boolean(activeJob) || actionMutation.isPending || deletionMutation.isPending}
             onClick={() => {
               if (action === 'down') {
                 actionMutation.reset();
-                setDownConfirmation('');
+                setConfirmationValue('');
+                setConfirmationAction('down');
               } else {
                 startAction(action);
               }
@@ -244,6 +279,33 @@ export function NetworkOperationsPage() {
             </span>
           </button>
         ))}
+      </section>
+
+      <section className="network-delete-zone" aria-labelledby="network-delete-title">
+        <div className="network-delete-zone__signal" aria-hidden="true"><Trash2 size={18} /></div>
+        <div>
+          <span className="eyebrow">注册与资源回收</span>
+          <h2 id="network-delete-title">彻底删除网络</h2>
+          <p>
+            先执行完整清理，再释放端口和网络注册。
+            {networkSummary?.managementMode === 'imported'
+              ? ' 外部导入工作区会保留。'
+              : ' 平台托管工作区也会一并删除。'}
+          </p>
+        </div>
+        <button
+          ref={deleteButtonRef}
+          className="danger-action network-delete-zone__action"
+          type="button"
+          disabled={Boolean(activeJob) || actionMutation.isPending || deletionMutation.isPending}
+          onClick={() => {
+            deletionMutation.reset();
+            setConfirmationValue('');
+            setConfirmationAction('delete');
+          }}
+        >
+          <Trash2 size={15} /> 删除网络
+        </button>
       </section>
 
       {activeJob ? (
@@ -268,6 +330,13 @@ export function NetworkOperationsPage() {
         <div className="runtime-notice runtime-notice--warning" role="alert">
           <CircleAlert size={17} />
           {getApiErrorMessage(actionMutation.error, '无法创建网络运维作业。')}
+        </div>
+      ) : null}
+
+      {deletionMutation.isError ? (
+        <div className="runtime-notice runtime-notice--warning" role="alert">
+          <CircleAlert size={17} />
+          {getApiErrorMessage(deletionMutation.error, '无法创建网络删除作业。')}
         </div>
       ) : null}
 
@@ -344,44 +413,67 @@ export function NetworkOperationsPage() {
         )}
       </Panel>
 
-      {downConfirmation !== null ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setDownConfirmation(null)}>
+      {confirmationAction !== null ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setConfirmationAction(null)}>
           <section
             ref={confirmDialogRef}
             className="import-dialog operation-confirm-dialog"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="down-confirm-title"
+            aria-labelledby="network-confirm-title"
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={handleConfirmDialogKeyDown}
           >
             <div className="import-dialog__heading">
               <div>
                 <span className="eyebrow">破坏性操作</span>
-                <h2 id="down-confirm-title">确认清理网络</h2>
+                <h2 id="network-confirm-title">
+                  {confirmationAction === 'delete' ? '确认彻底删除网络' : '确认清理网络'}
+                </h2>
               </div>
-              <button className="icon-button" type="button" onClick={() => setDownConfirmation(null)} aria-label="关闭">
+              <button className="icon-button" type="button" onClick={() => setConfirmationAction(null)} aria-label="关闭">
                 <X size={17} />
               </button>
             </div>
             <p>
-              此操作执行 <code>network.sh down</code>，会删除容器卷、组织材料和通道产物。请输入网络 ID <strong>{networkId}</strong> 继续。
+              {confirmationAction === 'delete' ? (
+                <>
+                  系统会先执行 <code>network.sh down</code>，删除目标容器、卷、Docker Network、链码构建资源和运行材料，然后释放注册记录与端口。
+                  {networkSummary?.managementMode === 'imported'
+                    ? ' 导入网络的外部工作区不会删除。'
+                    : ' 平台托管工作区会永久删除。'}
+                </>
+              ) : (
+                <>此操作执行 <code>network.sh down</code>，会删除运行容器、卷、组织材料和通道产物，但保留网络注册与工作区。</>
+              )}{' '}
+              请输入网络 ID <strong>{networkId}</strong> 继续。
             </p>
             <input
               autoFocus
-              value={downConfirmation}
-              onChange={(event) => setDownConfirmation(event.target.value)}
+              value={confirmationValue}
+              onChange={(event) => setConfirmationValue(event.target.value)}
               placeholder={networkId}
             />
             <div className="operation-confirm-dialog__actions">
-              <button className="secondary-action" type="button" onClick={() => setDownConfirmation(null)}>取消</button>
+              <button className="secondary-action" type="button" onClick={() => setConfirmationAction(null)}>取消</button>
               <button
                 className="danger-action"
                 type="button"
-                disabled={downConfirmation !== networkId || actionMutation.isPending}
-                onClick={() => startAction('down', downConfirmation)}
+                disabled={
+                  confirmationValue !== networkId ||
+                  actionMutation.isPending ||
+                  deletionMutation.isPending
+                }
+                onClick={() => {
+                  if (confirmationAction === 'delete') {
+                    deletionMutation.mutate({ networkId, confirmation: confirmationValue });
+                  } else {
+                    startAction('down', confirmationValue);
+                  }
+                }}
               >
-                <Trash2 size={15} /> 清理网络
+                <Trash2 size={15} />
+                {confirmationAction === 'delete' ? '永久删除' : '清理网络'}
               </button>
             </div>
           </section>
@@ -392,7 +484,13 @@ export function NetworkOperationsPage() {
 }
 
 function isNetworkLifecycleAction(value: string): value is NetworkLifecycleAction {
-  return value === 'up' || value === 'stop' || value === 'restart' || value === 'down';
+  return (
+    value === 'up' ||
+    value === 'stop' ||
+    value === 'restart' ||
+    value === 'down' ||
+    value === 'delete'
+  );
 }
 
 function isNetworkLifecycleJob(
