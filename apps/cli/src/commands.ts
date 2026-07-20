@@ -12,17 +12,21 @@ import { loadConfigurationFile } from './configuration-file.js';
 import {
   printHealth,
   printJob,
+  printJobEvent,
+  printJobFinished,
   printJobs,
+  printJobStarted,
   printNetwork,
   printNetworks,
   type OutputWriter,
 } from './output.js';
+import { followJob, jobExitCode } from './job-follow.js';
 
 export async function runCommand(
   options: GlobalOptions,
   client: ControlPlaneClient,
   writer: OutputWriter,
-): Promise<void> {
+): Promise<number | undefined> {
   const [group, action, ...args] = options.command;
 
   if (group === 'health' && action === undefined) {
@@ -62,8 +66,7 @@ export async function runCommand(
       scriptAction,
       scriptAction === 'down' ? networkId : undefined,
     );
-    printJob(job, options.output, writer);
-    return;
+    return runOrDetachJob(job, args, options, client, writer);
   }
 
   if (group === 'network' && action === 'delete') {
@@ -71,8 +74,13 @@ export async function runCommand(
     if (!hasFlag(args, '--yes')) {
       throw new CliUsageError('network delete 会彻底删除网络，请增加 --yes 确认。');
     }
-    printJob(await client.deleteNetwork(networkId, networkId), options.output, writer);
-    return;
+    return runOrDetachJob(
+      await client.deleteNetwork(networkId, networkId),
+      args,
+      options,
+      client,
+      writer,
+    );
   }
 
   if (group === 'job' && action === 'list') {
@@ -88,7 +96,46 @@ export async function runCommand(
     return;
   }
 
+  if (group === 'job' && action === 'follow') {
+    const jobId = JobIdSchema.parse(args[0]);
+    return followExistingJob(jobId, options, client, writer);
+  }
+
+  if (group === 'job' && action === 'cancel') {
+    const jobId = JobIdSchema.parse(args[0]);
+    const job = await client.cancelJob(jobId);
+    return runOrDetachJob(job, args, options, client, writer);
+  }
+
   throw new CliUsageError('无法识别命令，请运行 pfctl --help 查看用法。');
+}
+
+async function runOrDetachJob(
+  job: Awaited<ReturnType<ControlPlaneClient['getJob']>>,
+  args: string[],
+  options: GlobalOptions,
+  client: ControlPlaneClient,
+  writer: OutputWriter,
+): Promise<number | undefined> {
+  if (hasFlag(args, '--detach')) {
+    printJob(job, options.output, writer);
+    return;
+  }
+  printJobStarted(job, options.output, writer);
+  return followExistingJob(job.id, options, client, writer);
+}
+
+async function followExistingJob(
+  jobId: string,
+  options: GlobalOptions,
+  client: ControlPlaneClient,
+  writer: OutputWriter,
+): Promise<number> {
+  const job = await followJob(client, jobId, {
+    onEvent: (event) => printJobEvent(event, options.output, writer),
+  });
+  printJobFinished(job, options.output, writer);
+  return jobExitCode(job);
 }
 
 function requireOption(args: string[], name: string): string {

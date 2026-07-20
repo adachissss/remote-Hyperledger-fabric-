@@ -25,8 +25,7 @@ export async function main(
     }
 
     const client = new ControlPlaneClient(options.apiUrl);
-    await runCommand(options, client, writer);
-    return 0;
+    return (await runCommand(options, client, writer)) ?? 0;
   } catch (error) {
     if (error instanceof CliUsageError) {
       writer.error(`参数错误：${error.message}`);
@@ -56,13 +55,15 @@ const HELP_TEXT = `pfctl - plus-fabric 终端控制工具
   network list                   查看已注册网络
   network create --file <path>   通过 YAML/JSON 创建托管网络
   network import --file <path>   导入已有网络工作区
-  network up <id>                启动网络
-  network stop <id>              暂停网络
-  network restart <id>           恢复网络
-  network down <id> --yes        清理网络运行资源
-  network delete <id> --yes      彻底删除网络
+  network up <id> [--detach]     启动网络并跟随日志
+  network stop <id> [--detach]   暂停网络并跟随日志
+  network restart <id> [--detach] 恢复网络并跟随日志
+  network down <id> --yes [--detach] 清理网络运行资源
+  network delete <id> --yes [--detach] 彻底删除网络
   job list [--network <id>]      查看作业
   job get <job-id>               查看作业详情
+  job follow <job-id>            跟随已有作业直到结束
+  job cancel <job-id>            取消并跟随作业直到结束
 
 全局选项：
   --api <url>                    API 地址，默认 http://127.0.0.1:4100

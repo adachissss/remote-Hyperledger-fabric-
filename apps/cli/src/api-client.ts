@@ -3,6 +3,7 @@ import {
   HealthResponseSchema,
   ImportNetworkRequestSchema,
   JobEventListResponseSchema,
+  JobEventSchema,
   JobListResponseSchema,
   JobSchema,
   NetworkListResponseSchema,
@@ -11,6 +12,7 @@ import {
   type HealthResponse,
   type ImportNetworkRequest,
   type Job,
+  type JobEvent,
   type JobEventListResponse,
   type JobListResponse,
   type NetworkListResponse,
@@ -118,6 +120,54 @@ export class ControlPlaneClient {
     });
   }
 
+  async streamJobEvents(
+    jobId: string,
+    afterId: number,
+    onEvent: (event: JobEvent) => void,
+    signal: AbortSignal,
+  ): Promise<number> {
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(
+        `${this.baseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/events?after=${afterId}`,
+        {
+          headers: {
+            Accept: 'text/event-stream',
+            'Last-Event-ID': String(afterId),
+          },
+          signal,
+        },
+      );
+    } catch (error) {
+      if (signal.aborted) return afterId;
+      throw new ControlPlaneClientError(
+        `无法订阅作业日志：${error instanceof Error ? error.message : String(error)}`,
+        null,
+        'event_stream_failed',
+      );
+    }
+
+    if (!response.ok) {
+      const payload = (await readJson(response)) as ControlPlaneErrorPayload | null;
+      throw new ControlPlaneClientError(
+        typeof payload?.message === 'string'
+          ? payload.message
+          : `订阅作业日志失败，状态码 ${response.status}。`,
+        response.status,
+        typeof payload?.error === 'string' ? payload.error : 'event_stream_failed',
+      );
+    }
+    if (!response.body) {
+      throw new ControlPlaneClientError(
+        '控制平面没有返回作业日志流。',
+        response.status,
+        'empty_event_stream',
+      );
+    }
+
+    return consumeEventStream(response.body, afterId, onEvent, signal);
+  }
+
   async request<T>(
     path: string,
     parser: ResponseParser<T>,
@@ -195,5 +245,52 @@ async function readJson(response: Response): Promise<unknown> {
       response.status,
       'invalid_json_response',
     );
+  }
+}
+
+export async function consumeEventStream(
+  stream: ReadableStream<Uint8Array>,
+  afterId: number,
+  onEvent: (event: JobEvent) => void,
+  signal?: AbortSignal,
+): Promise<number> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let cursor = afterId;
+
+  try {
+    while (!signal?.aborted) {
+      const result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true }).replace(/\r\n/g, '\n');
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary >= 0) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const event = parseEventFrame(frame);
+        if (event && event.id > cursor) {
+          cursor = event.id;
+          onEvent(event);
+        }
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return cursor;
+}
+
+function parseEventFrame(frame: string): JobEvent | null {
+  const dataLines = frame
+    .split('\n')
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart());
+  if (dataLines.length === 0) return null;
+  try {
+    return JobEventSchema.parse(JSON.parse(dataLines.join('\n')));
+  } catch {
+    return null;
   }
 }

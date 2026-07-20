@@ -1,6 +1,7 @@
 import type {
   HealthResponse,
   Job,
+  JobEvent,
   JobListResponse,
   NetworkListResponse,
   NetworkSummary,
@@ -86,6 +87,36 @@ export function printJob(job: Job, mode: OutputMode, writer: OutputWriter): void
     writer.write('步骤：');
     for (const step of job.steps) writer.write(`  ${step.sequence}. [${step.status}] ${step.name}`);
   }
+}
+
+export function printJobStarted(job: Job, mode: OutputMode, writer: OutputWriter): void {
+  if (mode === 'json') {
+    writer.write(JSON.stringify({ type: 'job-started', job }));
+    return;
+  }
+  writer.write(`作业已创建：${job.id}`);
+  writer.write(`网络/操作：${job.networkId} / ${job.action}`);
+}
+
+export function printJobEvent(event: JobEvent, mode: OutputMode, writer: OutputWriter): void {
+  if (mode === 'json') {
+    writer.write(JSON.stringify({ type: 'job-event', event }));
+    return;
+  }
+  if (event.type === 'log') {
+    writer.write(event.message);
+    return;
+  }
+  writer.write(`[${event.type === 'status' ? '状态' : '步骤'}] ${event.message}`);
+}
+
+export function printJobFinished(job: Job, mode: OutputMode, writer: OutputWriter): void {
+  if (mode === 'json') {
+    writer.write(JSON.stringify({ type: 'job-finished', job }));
+    return;
+  }
+  writer.write(`作业结束：${job.status}${job.exitCode === null ? '' : `，退出码 ${job.exitCode}`}`);
+  if (job.errorMessage) writer.error(`作业错误：${job.errorMessage}`);
 }
 
 export function printJson(value: unknown, writer: OutputWriter): void {
