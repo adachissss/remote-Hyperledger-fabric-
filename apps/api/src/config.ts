@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import path from 'node:path';
 
 import { z } from 'zod';
@@ -20,6 +21,9 @@ const EnvironmentSchema = z.object({
     .string()
     .default(path.join(projectRoot, 'runtime/networks')),
   CONTROL_PLANE_DRIVER_TEMPLATE_ROOT: z.string().default(projectRoot),
+  CONTROL_PLANE_DISCOVERY_ROOT: z
+    .string()
+    .default(path.join(os.homedir(), '.plus-fabric/discovery/networks')),
 });
 
 export type AppConfig = {
@@ -31,6 +35,7 @@ export type AppConfig = {
   allowedNetworkRoots: string[];
   managedNetworkRoot: string;
   driverTemplateRoot: string;
+  discoveryRoot: string;
 };
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -53,5 +58,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       .map((root) => path.resolve(root)),
     managedNetworkRoot: path.resolve(parsed.CONTROL_PLANE_MANAGED_NETWORK_ROOT),
     driverTemplateRoot: path.resolve(parsed.CONTROL_PLANE_DRIVER_TEMPLATE_ROOT),
+    discoveryRoot: path.resolve(parsed.CONTROL_PLANE_DISCOVERY_ROOT),
   };
 }

@@ -25,6 +25,7 @@ import {
   LedgerBlockSchema,
   LedgerChannelListResponseSchema,
   NetworkListResponseSchema,
+  NetworkDiscoveryListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
   NetworkTopologyResponseSchema,
@@ -215,6 +216,64 @@ test('network registry starts empty and never infers a local instance', async ()
     assert.deepEqual(payload, { items: [], total: 0 });
   } finally {
     await app.close();
+  }
+});
+
+test('script discovery manifests are listed without being registered automatically', async () => {
+  const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'plus-fabric-discovery-'));
+  const discoveryRoot = path.join(temporaryRoot, 'discoveries');
+  const workspaceRoot = path.join(temporaryRoot, 'cli-network');
+  const configPath = path.join(workspaceRoot, 'config', 'orgs.yaml');
+  mkdirSync(discoveryRoot, { recursive: true });
+  mkdirSync(path.dirname(configPath), { recursive: true });
+  writeFileSync(configPath, 'network:\n  id: cli-network\n', 'utf8');
+  writeFileSync(
+    path.join(discoveryRoot, 'cli-network.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      networkId: 'cli-network',
+      displayName: 'CLI Network',
+      source: 'script',
+      status: 'running',
+      workspaceRoot,
+      configPath,
+      composeProject: 'cli_network',
+      dockerNetwork: 'cli-network-docker',
+      fabricVersion: '2.4.1',
+      fabricCaVersion: '1.5.3',
+      summary: {
+        peerOrganizationCount: 2,
+        peerCount: 4,
+        ordererCount: 3,
+        channelCount: 2,
+      },
+      updatedAt: '2026-07-20T12:00:00.000Z',
+    }),
+    'utf8',
+  );
+  writeFileSync(path.join(discoveryRoot, 'invalid.json'), '{not-json', 'utf8');
+
+  const app = await buildApp(
+    createTestConfig({ CONTROL_PLANE_DISCOVERY_ROOT: discoveryRoot }),
+  );
+  try {
+    const discoveryResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/networks/discoveries',
+    });
+    assert.equal(discoveryResponse.statusCode, 200);
+    const discoveries = NetworkDiscoveryListResponseSchema.parse(discoveryResponse.json());
+    assert.equal(discoveries.total, 1);
+    assert.equal(discoveries.invalidManifestCount, 1);
+    assert.equal(discoveries.items[0]?.registrationStatus, 'unregistered');
+    assert.equal(discoveries.items[0]?.workspaceAvailable, true);
+    assert.equal(discoveries.items[0]?.configAvailable, true);
+
+    const networksResponse = await app.inject({ method: 'GET', url: '/api/v1/networks' });
+    assert.equal(NetworkListResponseSchema.parse(networksResponse.json()).total, 0);
+  } finally {
+    await app.close();
+    rmSync(temporaryRoot, { recursive: true, force: true });
   }
 });
 

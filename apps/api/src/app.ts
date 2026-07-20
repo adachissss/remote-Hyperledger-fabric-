@@ -33,6 +33,7 @@ import {
   type HostPortProbe,
 } from './modules/networks/managed-port-planner.js';
 import { NetworkImportService } from './modules/networks/network-import-service.js';
+import { NetworkDiscoveryService } from './modules/networks/network-discovery-service.js';
 import { NetworkObservatoryService } from './modules/networks/network-observatory-service.js';
 import { createNetworkRegistry } from './modules/networks/network-registry.js';
 import { registerNetworkRoutes } from './modules/networks/network-routes.js';
@@ -70,6 +71,10 @@ export async function buildApp(
     networkRegistry,
     config.allowedNetworkRoots,
     config.managedNetworkRoot,
+  );
+  const networkDiscoveryService = new NetworkDiscoveryService(
+    networkRegistry,
+    config.discoveryRoot,
   );
   const managedNetworkService = new ManagedNetworkService(
     networkRegistry,
@@ -128,6 +133,7 @@ export async function buildApp(
     networkObservatoryService,
     jobService,
     managedNetworkService,
+    networkDiscoveryService,
   });
 
   app.setNotFoundHandler(async (_request, reply) => {

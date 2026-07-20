@@ -4,6 +4,7 @@ import {
   ImportNetworkRequestSchema,
   NetworkIdSchema,
   NetworkListResponseSchema,
+  NetworkDiscoveryListResponseSchema,
   NetworkNodeIdSchema,
   NetworkScriptActionSchema,
   type NetworkListResponse,
@@ -12,6 +13,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import { JobServiceError, type JobService } from '../jobs/job-service.js';
 import { NetworkImportError, type NetworkImportService } from './network-import-service.js';
+import type { NetworkDiscoveryService } from './network-discovery-service.js';
 import type { NetworkObservatoryService } from './network-observatory-service.js';
 import { ManagedNetworkError, type ManagedNetworkService } from './managed-network-service.js';
 import type { NetworkRegistry } from './network-registry.js';
@@ -22,6 +24,7 @@ type NetworkRouteOptions = {
   networkObservatoryService: NetworkObservatoryService;
   jobService: JobService;
   managedNetworkService: ManagedNetworkService;
+  networkDiscoveryService: NetworkDiscoveryService;
 };
 
 export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = async (
@@ -31,6 +34,12 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
   app.get('/', async (): Promise<NetworkListResponse> => {
     const items = await options.networkRegistry.list();
     return NetworkListResponseSchema.parse({ items, total: items.length });
+  });
+
+  app.get('/discoveries', async () => {
+    return NetworkDiscoveryListResponseSchema.parse(
+      await options.networkDiscoveryService.list(),
+    );
   });
 
   app.post('/', async (request, reply) => {
