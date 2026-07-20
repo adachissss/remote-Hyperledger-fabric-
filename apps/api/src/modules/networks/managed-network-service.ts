@@ -46,6 +46,7 @@ const MANAGED_SCRIPT_FILES = [
   'osnadmin-examples.sh',
   'setGlobals.sh',
   'update-docker-compose-networks.sh',
+  'write-discovery-manifest.sh',
 ] as const;
 
 export interface ManagedNamespaceProbe {
@@ -391,6 +392,7 @@ function buildManagedConfig(
 ) {
   return {
     network: {
+      display_name: request.displayName,
       domain: request.domain,
       tls_enabled: true,
       aggregate_all_tls_roots: true,

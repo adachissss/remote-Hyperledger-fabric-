@@ -50,6 +50,12 @@ write_orderer_service() {
   ${host}:
     container_name: ${host}
     image: hyperledger/fabric-orderer:${FABRIC_IMAGE_TAG}
+    labels:
+      com.plus-fabric.network.id: "${FABRIC_NET_ID}"
+      com.plus-fabric.compose-project: "${COMPOSE_PROJECT_NAME}"
+      com.plus-fabric.role: "orderer"
+      com.plus-fabric.organization: "${mspid}"
+      com.plus-fabric.node: "${host}"
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -92,6 +98,8 @@ EOF
 }
 
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+FABRIC_NET_ID=$(get_config_value_raw '.network.id')
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
 ORDERER_CONFIG=$(load_orderer_org_config)
 ORDERER_MSPID=$(printf '%s' "$ORDERER_CONFIG" | "$YQ_BIN" -r '.mspid')
 ORDERER_DOMAIN=$(printf '%s' "$ORDERER_CONFIG" | "$YQ_BIN" -r '.domain')
@@ -120,7 +128,10 @@ for node_line in "${ORDERER_NODES[@]}"; do
     "$ORDERER_MSPID" \
     "$ORDERER_DOMAIN"
 
-  ORDERER_VOLUMES+=("  ${orderer_host}:")
+  ORDERER_VOLUMES+=("  ${orderer_host}:
+    labels:
+      com.plus-fabric.network.id: \"${FABRIC_NET_ID}\"
+      com.plus-fabric.compose-project: \"${COMPOSE_PROJECT_NAME}\"")
   orderer_index=$((orderer_index + 1))
 done
 

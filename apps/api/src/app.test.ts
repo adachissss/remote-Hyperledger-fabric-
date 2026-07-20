@@ -949,6 +949,7 @@ channels:
       );
       const managedConfig = readFileSync(managedConfigPath, 'utf8');
       assert.match(managedConfig, /namespace_containers: true/);
+      assert.match(managedConfig, /display_name: Managed Network/);
       assert.match(managedConfig, /name: shared-channel/);
       assert.match(managedConfig, /name: alpha-private/);
       assert.match(managedConfig, /peer_count: 2/);
@@ -981,6 +982,18 @@ channels:
         statSync(
           path.join(temporaryRoot, 'managed-networks', 'managed-network', 'upgrade_chaincode.sh'),
         ).isFile(),
+        true,
+      );
+      assert.equal(
+        existsSync(
+          path.join(
+            temporaryRoot,
+            'managed-networks',
+            'managed-network',
+            'script',
+            'write-discovery-manifest.sh',
+          ),
+        ),
         true,
       );
       assert.equal(

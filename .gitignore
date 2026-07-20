@@ -50,6 +50,7 @@ wallet/
 *.bk
 /history/
 /runtime/
+.plus-fabric/
 
 # Editor and OS metadata.
 .idea/

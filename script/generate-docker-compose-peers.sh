@@ -89,6 +89,7 @@ mapfile -t PEER_ORGS < <(get_peer_org_names)
 FABRIC_NET_ID=$(get_config_value_raw '.network.id')
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
 FABRIC_NET_PORT=$(get_config_value_raw '.network.network_port__start // 0')
 FABRIC_IMAGE_TAG=$(get_config_value_raw '.network.fabric_version // "latest"')
 STATE_DATABASE=$(get_config_value_raw '.network.state_database // "leveldb"')
@@ -136,6 +137,12 @@ for org in "${PEER_ORGS[@]}"; do
   ${COUCHDB_HOST}:
     container_name: ${COUCHDB_HOST}
     image: ${COUCHDB_IMAGE}
+    labels:
+      com.plus-fabric.network.id: "${FABRIC_NET_ID}"
+      com.plus-fabric.compose-project: "${COMPOSE_PROJECT_NAME}"
+      com.plus-fabric.role: "couchdb"
+      com.plus-fabric.organization: "${org}"
+      com.plus-fabric.node: "${COUCHDB_HOST}"
     environment:
       - COUCHDB_USER=${COUCHDB_USERNAME}
       - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
@@ -151,7 +158,10 @@ for org in "${PEER_ORGS[@]}"; do
     networks:
       - ${FABRIC_DOCKER_NET}
 EOF
-      ALL_VOLUMES+=("  ${COUCHDB_HOST}:")
+      ALL_VOLUMES+=("  ${COUCHDB_HOST}:
+    labels:
+      com.plus-fabric.network.id: \"${FABRIC_NET_ID}\"
+      com.plus-fabric.compose-project: \"${COMPOSE_PROJECT_NAME}\"")
       COUCHDB_PEER_SETTINGS=$(printf '%s\n' \
         "      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB" \
         "      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=${COUCHDB_HOST}:5984" \
@@ -171,6 +181,11 @@ EOF
     image: hyperledger/fabric-peer:${FABRIC_IMAGE_TAG}
     labels:
       service: hyperledger-fabric
+      com.plus-fabric.network.id: "${FABRIC_NET_ID}"
+      com.plus-fabric.compose-project: "${COMPOSE_PROJECT_NAME}"
+      com.plus-fabric.role: "peer"
+      com.plus-fabric.organization: "${org}"
+      com.plus-fabric.node: "${PEER_HOST}"
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_PROFILE_ENABLED=false
@@ -235,7 +250,10 @@ ${COUCHDB_DEPENDS_ON}
       - ${FABRIC_DOCKER_NET}
 EOF
 
-    ALL_VOLUMES+=("  ${PEER_HOST}:")
+    ALL_VOLUMES+=("  ${PEER_HOST}:
+    labels:
+      com.plus-fabric.network.id: \"${FABRIC_NET_ID}\"
+      com.plus-fabric.compose-project: \"${COMPOSE_PROJECT_NAME}\"")
   done
 done
 

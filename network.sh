@@ -59,10 +59,24 @@ REMOVE_CHAINCODE_IMAGES_ON_DOWN="${REMOVE_CHAINCODE_IMAGES_ON_DOWN:-$CONFIG_REMO
 ensure_docker_network() {
     if ! docker network inspect "$FABRIC_DOCKER_NET" >/dev/null 2>&1; then
         warn "Docker 网络不存在，正在创建: $FABRIC_DOCKER_NET"
-        docker network create "$FABRIC_DOCKER_NET" >/dev/null
+        docker network create \
+            --label "com.plus-fabric.network.id=${FABRIC_NET_ID}" \
+            --label "com.plus-fabric.compose-project=${COMPOSE_PROJECT_NAME}" \
+            "$FABRIC_DOCKER_NET" >/dev/null
         success "Docker 网络创建完成: $FABRIC_DOCKER_NET"
     else
         info "Docker 网络已存在: $FABRIC_DOCKER_NET"
+    fi
+}
+
+update_discovery_manifest() {
+    local status="$1"
+    if [[ ! -x "${PROJECT_ROOT}/script/write-discovery-manifest.sh" ]]; then
+        warn "缺少网络发现清单脚本，跳过状态登记"
+        return 0
+    fi
+    if ! "${PROJECT_ROOT}/script/write-discovery-manifest.sh" "$status" >/dev/null; then
+        warn "网络操作已完成，但发现清单写入失败"
     fi
 }
 
@@ -427,6 +441,7 @@ do_up() {
 
 
 
+    update_discovery_manifest running
     success "===== UP 完成 Fabric 网络已全部启动 ====="
 }
 
@@ -450,6 +465,7 @@ do_stop() {
     compose_if_exists docker-compose-peers.yaml stop
     compose_if_exists docker-compose-orderers.yaml stop
     compose_if_exists docker-compose-ca.yaml stop
+    update_discovery_manifest stopped
     success "===== STOP 完成！容器已暂停，数据未清理 ====="
 }
 
@@ -473,6 +489,7 @@ do_restart() {
     cd "$PROJECT_ROOT/script"
     ./docker-ip-hosts-Mapping.sh
 
+    update_discovery_manifest running
     success "===== RESTART 完成！Fabric 容器已重新启动 ====="
 }
 
@@ -506,6 +523,7 @@ do_down() {
     rm -rf organizations/
     rm -rf channel-artifacts/
 
+    update_discovery_manifest removed
     success "===== DOWN 完成！环境已清理 ====="
 }
 
@@ -528,6 +546,9 @@ case "${1:-}" in
     cleanup-docker)
         cleanup_docker_resources
         ;;
+    manifest)
+        update_discovery_manifest "${2:-unknown}"
+        ;;
     *)
         echo
         warn "用法："
@@ -535,6 +556,7 @@ case "${1:-}" in
         echo "  ./network.sh stop      暂停所有 Fabric 容器，保留数据"
         echo "  ./network.sh restart   重新启动已暂停的 Fabric 容器"
         echo "  ./network.sh down      停止并清理环境"
+        echo "  ./network.sh manifest  刷新本地网络发现清单"
         echo
         exit 1
         ;;

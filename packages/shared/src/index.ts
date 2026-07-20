@@ -1,4 +1,5 @@
 export * from './schemas/chaincode.js';
+export * from './schemas/discovery.js';
 export * from './schemas/health.js';
 export * from './schemas/job.js';
 export * from './schemas/ledger.js';

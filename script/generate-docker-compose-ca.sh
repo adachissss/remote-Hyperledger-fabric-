@@ -76,11 +76,18 @@ write_ca_service() {
   local host_port="$4"
   local volume_dir="$5"
   local bootstrap_password="$6"
+  local organization="$7"
 
   cat >> "$OUTPUT_FILE" <<EOF
   ${service_name}:
     image: hyperledger/fabric-ca:${FABRIC_CA_IMAGE_TAG}
     container_name: ${container_name}
+    labels:
+      com.plus-fabric.network.id: "${FABRIC_NET_ID}"
+      com.plus-fabric.compose-project: "${COMPOSE_PROJECT_NAME}"
+      com.plus-fabric.role: "ca"
+      com.plus-fabric.organization: "${organization}"
+      com.plus-fabric.node: "${container_name}"
     ports:
       - "${host_port}:${CA_INTERNAL_PORT}"
     environment:
@@ -97,7 +104,9 @@ EOF
 }
 
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+FABRIC_NET_ID=$(get_config_value_raw '.network.id')
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
 FABRIC_CA_IMAGE_TAG=$(get_config_value_raw '.network.fabric_ca_version // "latest"')
 NAMESPACE_CONTAINERS=$(get_config_value_raw '.network.namespace_containers // false')
 if [[ "$NAMESPACE_CONTAINERS" == "true" ]]; then
@@ -275,7 +284,8 @@ for org in "${PEER_ORGS[@]}"; do
     "$CA_NAME" \
     "$HOST_PORT" \
     "../organizations/fabric-ca/${org}" \
-    "$ADMIN_PASSWORD"
+    "$ADMIN_PASSWORD" \
+    "$org"
 done
 
 ORDERER_CA_HOST_PORT=$(get_orderer_ca_host_port "$ORDERER_CA_PORT_OVERRIDE" "$ORDERER_CA_URL" "${#PEER_ORGS[@]}")
@@ -293,7 +303,8 @@ write_ca_service \
   "$ORDERER_CA_NAME" \
   "$ORDERER_CA_HOST_PORT" \
   "../organizations/fabric-ca/ca-orderer" \
-  "$ORDERER_ADMIN_PASSWORD"
+  "$ORDERER_ADMIN_PASSWORD" \
+  "orderer"
 
 cat >> "$OUTPUT_FILE" <<EOF
 networks:
