@@ -37,3 +37,36 @@ test('preserves API error code and message', async () => {
       error.message === 'missing',
   );
 });
+
+test('creates lifecycle jobs through the existing network action route', async () => {
+  let requestedUrl = '';
+  let requestedInit: RequestInit | undefined;
+  const client = new ControlPlaneClient('http://127.0.0.1:4100', async (input, init) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+    return new Response(
+      JSON.stringify({
+        id: '00000000-0000-4000-8000-000000000001',
+        kind: 'network-lifecycle',
+        networkId: 'test-network',
+        action: 'down',
+        context: {},
+        status: 'queued',
+        createdAt: '2026-07-20T00:00:00.000Z',
+        startedAt: null,
+        finishedAt: null,
+        actor: 'local-user',
+        exitCode: null,
+        errorMessage: null,
+        steps: [],
+      }),
+      { status: 202 },
+    );
+  });
+
+  const job = await client.createNetworkAction('test-network', 'down', 'test-network');
+  assert.equal(job.action, 'down');
+  assert.equal(requestedUrl, 'http://127.0.0.1:4100/api/v1/networks/test-network/actions/down');
+  assert.equal(requestedInit?.method, 'POST');
+  assert.equal(requestedInit?.body, JSON.stringify({ confirmation: 'test-network' }));
+});

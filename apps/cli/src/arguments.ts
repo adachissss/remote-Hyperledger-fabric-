@@ -59,6 +59,10 @@ export function readOption(args: string[], name: string): string | undefined {
   return inline?.slice(prefix.length);
 }
 
+export function hasFlag(args: string[], name: string): boolean {
+  return args.includes(name);
+}
+
 function parseOutputMode(value: string): OutputMode {
   if (value === 'human' || value === 'json') return value;
   throw new CliUsageError(`--output 仅支持 human 或 json，收到：${value}`);

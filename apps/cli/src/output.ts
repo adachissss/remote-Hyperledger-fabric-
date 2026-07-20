@@ -1,4 +1,10 @@
-import type { HealthResponse, Job, JobListResponse, NetworkListResponse } from '@plus-fabric/shared';
+import type {
+  HealthResponse,
+  Job,
+  JobListResponse,
+  NetworkListResponse,
+  NetworkSummary,
+} from '@plus-fabric/shared';
 
 import type { OutputMode } from './arguments.js';
 
@@ -42,6 +48,18 @@ export function printNetworks(
       String(network.nodeCount),
     ]),
   ));
+}
+
+export function printNetwork(
+  network: NetworkSummary,
+  mode: OutputMode,
+  writer: OutputWriter,
+): void {
+  if (mode === 'json') return printJson(network, writer);
+  writer.write(`网络已注册：${network.displayName} (${network.id})`);
+  writer.write(`来源：${network.managementMode === 'managed' ? '托管创建' : '外部导入'}`);
+  writer.write(`当前状态：${network.status}`);
+  writer.write(`组织/通道/节点：${network.organizationCount}/${network.channelCount}/${network.nodeCount}`);
 }
 
 export function printJobs(response: JobListResponse, mode: OutputMode, writer: OutputWriter): void {

@@ -1,14 +1,21 @@
 import {
+  CreateManagedNetworkRequestSchema,
   HealthResponseSchema,
+  ImportNetworkRequestSchema,
   JobEventListResponseSchema,
   JobListResponseSchema,
   JobSchema,
   NetworkListResponseSchema,
+  NetworkSummarySchema,
+  type CreateManagedNetworkRequest,
   type HealthResponse,
+  type ImportNetworkRequest,
   type Job,
   type JobEventListResponse,
   type JobListResponse,
   type NetworkListResponse,
+  type NetworkScriptAction,
+  type NetworkSummary,
 } from '@plus-fabric/shared';
 
 type ResponseParser<T> = {
@@ -49,6 +56,44 @@ export class ControlPlaneClient {
 
   getNetworks(): Promise<NetworkListResponse> {
     return this.request('/api/v1/networks', NetworkListResponseSchema);
+  }
+
+  createManagedNetwork(request: CreateManagedNetworkRequest): Promise<NetworkSummary> {
+    const payload = CreateManagedNetworkRequestSchema.parse(request);
+    return this.request('/api/v1/networks', NetworkSummarySchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  importNetwork(request: ImportNetworkRequest): Promise<NetworkSummary> {
+    const payload = ImportNetworkRequestSchema.parse(request);
+    return this.request('/api/v1/networks/import', NetworkSummarySchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  createNetworkAction(
+    networkId: string,
+    action: NetworkScriptAction,
+    confirmation?: string,
+  ): Promise<Job> {
+    return this.request(
+      `/api/v1/networks/${encodeURIComponent(networkId)}/actions/${action}`,
+      JobSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify(confirmation ? { confirmation } : {}),
+      },
+    );
+  }
+
+  deleteNetwork(networkId: string, confirmation: string): Promise<Job> {
+    return this.request(`/api/v1/networks/${encodeURIComponent(networkId)}`, JobSchema, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation }),
+    });
   }
 
   getJobs(networkId?: string): Promise<JobListResponse> {

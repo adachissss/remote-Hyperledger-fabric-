@@ -54,6 +54,13 @@ const HELP_TEXT = `pfctl - plus-fabric 终端控制工具
 基础命令：
   health                         检查控制平面健康状态
   network list                   查看已注册网络
+  network create --file <path>   通过 YAML/JSON 创建托管网络
+  network import --file <path>   导入已有网络工作区
+  network up <id>                启动网络
+  network stop <id>              暂停网络
+  network restart <id>           恢复网络
+  network down <id> --yes        清理网络运行资源
+  network delete <id> --yes      彻底删除网络
   job list [--network <id>]      查看作业
   job get <job-id>               查看作业详情
 
