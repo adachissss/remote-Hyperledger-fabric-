@@ -4,9 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowRight, Boxes, Plus, ShieldAlert, X } from 'lucide-react';
 import type { NetworkDiscoveryCandidate } from '@plus-fabric/shared';
+import type { ImportNetworkRequest } from '@plus-fabric/shared';
 import { Link } from 'react-router-dom';
 
-import { getNetworks, importNetwork } from '../../api/control-plane';
+import {
+  getNetworks,
+  importNetwork,
+  importNetworkDiscovery,
+} from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
 import { ManagedNetworkDialog } from './ManagedNetworkDialog';
 import { NetworkDiscoveriesPanel } from './NetworkDiscoveriesPanel';
@@ -20,6 +25,7 @@ export function NetworksPage() {
   const queryClient = useQueryClient();
   const [importOpen, setImportOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [discoveryNetworkId, setDiscoveryNetworkId] = useState<string | null>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const importButtonRef = useRef<HTMLButtonElement>(null);
   const importDialogRef = useRef<HTMLElement>(null);
@@ -40,20 +46,16 @@ export function NetworksPage() {
   const networks = networksQuery.data?.items ?? [];
   const total = networksQuery.data?.total;
   const importMutation = useMutation({
-    mutationFn: importNetwork,
+    mutationFn: (input: NetworkImportMutationInput) =>
+      input.mode === 'discovery'
+        ? importNetworkDiscovery(input.discoveryNetworkId, input.request)
+        : importNetwork(input.request),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['networks'] });
       await queryClient.invalidateQueries({ queryKey: ['network-discoveries'] });
       setImportOpen(false);
-      setForm({
-        id: '',
-        displayName: '',
-        workspaceRoot: '',
-        configPath: 'config/orgs.yaml',
-        composeProject: '',
-        fabricVersion: '',
-        fabricCaVersion: '',
-      });
+      setDiscoveryNetworkId(null);
+      setForm(createEmptyImportForm());
     },
   });
 
@@ -79,6 +81,7 @@ export function NetworksPage() {
   const openImportDialog = (candidate?: NetworkDiscoveryCandidate) => {
     importMutation.reset();
     if (candidate) {
+      setDiscoveryNetworkId(candidate.manifest.networkId);
       setForm({
         id: normalizeNetworkId(candidate.manifest.networkId),
         displayName: candidate.manifest.displayName,
@@ -91,6 +94,9 @@ export function NetworksPage() {
         fabricVersion: candidate.manifest.fabricVersion ?? '',
         fabricCaVersion: candidate.manifest.fabricCaVersion ?? '',
       });
+    } else {
+      setDiscoveryNetworkId(null);
+      setForm(createEmptyImportForm());
     }
     setImportOpen(true);
   };
@@ -124,7 +130,15 @@ export function NetworksPage() {
 
   const submitImport = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    importMutation.mutate({
+    if (discoveryNetworkId) {
+      importMutation.mutate({
+        mode: 'discovery',
+        discoveryNetworkId,
+        request: { id: form.id, displayName: form.displayName },
+      });
+      return;
+    }
+    const request: ImportNetworkRequest = {
       id: form.id,
       displayName: form.displayName,
       driver: 'fabric-compose',
@@ -133,7 +147,8 @@ export function NetworksPage() {
       composeProject: form.composeProject,
       fabricVersion: form.fabricVersion || null,
       fabricCaVersion: form.fabricCaVersion || null,
-    });
+    };
+    importMutation.mutate({ mode: 'manual', request });
   };
 
   return (
@@ -278,7 +293,9 @@ export function NetworksPage() {
           >
             <div className="import-dialog__heading">
               <div>
-                <span className="eyebrow">现有工作区</span>
+                <span className="eyebrow">
+                  {discoveryNetworkId ? '终端发现清单' : '现有工作区'}
+                </span>
                 <h2 id="import-network-title">导入 Fabric 网络</h2>
               </div>
               <button
@@ -297,6 +314,12 @@ export function NetworksPage() {
               onSubmit={submitImport}
               aria-busy={importMutation.isPending}
             >
+              {discoveryNetworkId ? (
+                <div className="configuration-safety import-form__wide">
+                  <ShieldAlert size={16} />
+                  已锁定发现清单 {discoveryNetworkId}。确认后将重新校验工作区镜像清单、配置路径和注册表冲突，不需要额外配置允许根目录。
+                </div>
+              ) : null}
               <label>
                 <span>网络 ID</span>
                 <input
@@ -329,10 +352,13 @@ export function NetworksPage() {
                   required
                   aria-describedby="workspace-root-hint"
                   value={form.workspaceRoot}
+                  disabled={discoveryNetworkId !== null}
                   onChange={(event) => setForm({ ...form, workspaceRoot: event.target.value })}
                 />
                 <small id="workspace-root-hint">
-                  必须位于服务端管理员允许的网络根目录内。
+                  {discoveryNetworkId
+                    ? '路径来自已核验的标准发现清单。'
+                    : '必须位于服务端管理员允许的网络根目录内。'}
                 </small>
               </label>
               <label>
@@ -342,6 +368,7 @@ export function NetworksPage() {
                   required
                   aria-describedby="config-path-hint"
                   value={form.configPath}
+                  disabled={discoveryNetworkId !== null}
                   onChange={(event) => setForm({ ...form, configPath: event.target.value })}
                 />
                 <small id="config-path-hint">相对于工作区根目录。</small>
@@ -354,6 +381,7 @@ export function NetworksPage() {
                   pattern="[a-z0-9][a-z0-9_-]*"
                   title="使用小写字母、数字、下划线和连字符"
                   value={form.composeProject}
+                  disabled={discoveryNetworkId !== null}
                   onChange={(event) => setForm({ ...form, composeProject: event.target.value })}
                 />
               </label>
@@ -362,6 +390,7 @@ export function NetworksPage() {
                 <input
                   name="fabricVersion"
                   value={form.fabricVersion}
+                  disabled={discoveryNetworkId !== null}
                   onChange={(event) => setForm({ ...form, fabricVersion: event.target.value })}
                 />
               </label>
@@ -370,6 +399,7 @@ export function NetworksPage() {
                 <input
                   name="fabricCaVersion"
                   value={form.fabricCaVersion}
+                  disabled={discoveryNetworkId !== null}
                   onChange={(event) => setForm({ ...form, fabricCaVersion: event.target.value })}
                 />
               </label>
@@ -402,6 +432,29 @@ export function NetworksPage() {
       ) : null}
     </div>
   );
+}
+
+type NetworkImportMutationInput =
+  | {
+      mode: 'manual';
+      request: ImportNetworkRequest;
+    }
+  | {
+      mode: 'discovery';
+      discoveryNetworkId: string;
+      request: { id: string; displayName: string };
+    };
+
+function createEmptyImportForm() {
+  return {
+    id: '',
+    displayName: '',
+    workspaceRoot: '',
+    configPath: 'config/orgs.yaml',
+    composeProject: '',
+    fabricVersion: '',
+    fabricCaVersion: '',
+  };
 }
 
 function relativeConfigPath(workspaceRoot: string, configPath: string): string {

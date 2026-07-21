@@ -1208,6 +1208,20 @@ button:disabled {
   box-shadow: 0 0 0 3px var(--cyan-soft);
 }
 
+.import-form input:disabled {
+  color: var(--muted);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(8, 127, 105, 0.035),
+      rgba(8, 127, 105, 0.035) 5px,
+      rgba(255, 255, 255, 0.72) 5px,
+      rgba(255, 255, 255, 0.72) 10px
+    );
+  border-color: rgba(8, 127, 105, 0.18);
+  cursor: not-allowed;
+}
+
 .managed-network-dialog {
   width: min(1040px, 100%);
   padding-bottom: 0;

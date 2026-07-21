@@ -6,6 +6,7 @@ import {
   CreateChaincodeDeploymentRequestSchema,
   HealthResponseSchema,
   ImportNetworkRequestSchema,
+  ImportNetworkDiscoveryRequestSchema,
   JobEventListResponseSchema,
   JobEventSchema,
   JobListResponseSchema,
@@ -28,6 +29,7 @@ import {
   type CreateManagedNetworkRequest,
   type CreateChaincodeDeploymentRequest,
   type ImportNetworkRequest,
+  type ImportNetworkDiscoveryRequest,
   type Job,
   type JobEvent,
   type JobEventListResponse,
@@ -105,6 +107,19 @@ export async function importNetwork(request: ImportNetworkRequest): Promise<Netw
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  );
+}
+
+export async function importNetworkDiscovery(
+  discoveryNetworkId: string,
+  request: ImportNetworkDiscoveryRequest,
+): Promise<NetworkSummary> {
+  const payload = ImportNetworkDiscoveryRequestSchema.parse(request);
+  return NetworkSummarySchema.parse(
+    await requestJson(
+      `/api/v1/networks/discoveries/${encodeURIComponent(discoveryNetworkId)}/import`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
   );
 }
 

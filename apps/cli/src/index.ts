@@ -56,6 +56,8 @@ const HELP_TEXT = `pfctl - plus-fabric 终端控制工具
   network discover               扫描 network.sh 本地发现痕迹
   network create --file <path>   通过 YAML/JSON 创建托管网络
   network import --file <path>   导入已有网络工作区
+  network import-discovery <id> [--id <new-id>] [--name <name>]
+                                 确认导入标准脚本发现清单
   network up <id> [--detach]     启动网络并跟随日志
   network stop <id> [--detach]   暂停网络并跟随日志
   network restart <id> [--detach] 恢复网络并跟随日志

@@ -2,6 +2,7 @@ import {
   CreateManagedNetworkRequestSchema,
   HealthResponseSchema,
   ImportNetworkRequestSchema,
+  ImportNetworkDiscoveryRequestSchema,
   JobEventListResponseSchema,
   JobEventSchema,
   JobListResponseSchema,
@@ -12,6 +13,7 @@ import {
   type CreateManagedNetworkRequest,
   type HealthResponse,
   type ImportNetworkRequest,
+  type ImportNetworkDiscoveryRequest,
   type Job,
   type JobEvent,
   type JobEventListResponse,
@@ -83,6 +85,18 @@ export class ControlPlaneClient {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  }
+
+  importNetworkDiscovery(
+    discoveryNetworkId: string,
+    request: ImportNetworkDiscoveryRequest,
+  ): Promise<NetworkSummary> {
+    const payload = ImportNetworkDiscoveryRequestSchema.parse(request);
+    return this.request(
+      `/api/v1/networks/discoveries/${encodeURIComponent(discoveryNetworkId)}/import`,
+      NetworkSummarySchema,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
   }
 
   createNetworkAction(

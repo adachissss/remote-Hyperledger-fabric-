@@ -1,8 +1,10 @@
 import {
   CreateManagedNetworkRequestSchema,
   ImportNetworkRequestSchema,
+  ImportNetworkDiscoveryRequestSchema,
   JobIdSchema,
   NetworkIdSchema,
+  NetworkDiscoveryIdSchema,
   NetworkScriptActionSchema,
 } from '@plus-fabric/shared';
 
@@ -62,6 +64,22 @@ export async function runCommand(
     const filePath = requireOption(args, '--file');
     const request = ImportNetworkRequestSchema.parse(await loadConfigurationFile(filePath));
     printNetwork(await client.importNetwork(request), options.output, writer);
+    return;
+  }
+
+  if (group === 'network' && action === 'import-discovery') {
+    const discoveryNetworkId = NetworkDiscoveryIdSchema.parse(args[0]);
+    const id = readOption(args, '--id');
+    const displayName = readOption(args, '--name');
+    const request = ImportNetworkDiscoveryRequestSchema.parse({
+      ...(id ? { id } : {}),
+      ...(displayName ? { displayName } : {}),
+    });
+    printNetwork(
+      await client.importNetworkDiscovery(discoveryNetworkId, request),
+      options.output,
+      writer,
+    );
     return;
   }
 

@@ -114,3 +114,38 @@ test('reads local network discoveries through the shared response schema', async
   assert.equal(response.items[0]?.manifest.networkId, 'cli-network');
   assert.equal(response.items[0]?.registrationStatus, 'unregistered');
 });
+
+test('imports a confirmed discovery through its dedicated route', async () => {
+  let requestedUrl = '';
+  let requestedBody: RequestInit['body'];
+  const client = new ControlPlaneClient('http://127.0.0.1:4100', async (input, init) => {
+    requestedUrl = String(input);
+    requestedBody = init?.body;
+    return new Response(
+      JSON.stringify({
+        id: 'cli-network',
+        displayName: 'CLI Network',
+        driver: 'fabric-compose',
+        managementMode: 'imported',
+        status: 'unknown',
+        fabricVersion: '2.4.1',
+        organizationCount: 1,
+        channelCount: 1,
+        nodeCount: 3,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      }),
+      { status: 201 },
+    );
+  });
+
+  const network = await client.importNetworkDiscovery('legacy-network', {
+    id: 'cli-network',
+    displayName: 'CLI Network',
+  });
+  assert.equal(network.id, 'cli-network');
+  assert.equal(
+    requestedUrl,
+    'http://127.0.0.1:4100/api/v1/networks/discoveries/legacy-network/import',
+  );
+  assert.equal(requestedBody, JSON.stringify({ id: 'cli-network', displayName: 'CLI Network' }));
+});
