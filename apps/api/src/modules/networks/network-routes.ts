@@ -5,6 +5,8 @@ import {
   NetworkIdSchema,
   NetworkListResponseSchema,
   NetworkDiscoveryListResponseSchema,
+  ImportNetworkDiscoveryRequestSchema,
+  NetworkDiscoveryIdSchema,
   NetworkNodeIdSchema,
   NetworkScriptActionSchema,
   type NetworkListResponse,
@@ -13,7 +15,10 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import { JobServiceError, type JobService } from '../jobs/job-service.js';
 import { NetworkImportError, type NetworkImportService } from './network-import-service.js';
-import type { NetworkDiscoveryService } from './network-discovery-service.js';
+import {
+  NetworkDiscoveryError,
+  type NetworkDiscoveryService,
+} from './network-discovery-service.js';
 import type { NetworkObservatoryService } from './network-observatory-service.js';
 import { ManagedNetworkError, type ManagedNetworkService } from './managed-network-service.js';
 import type { NetworkRegistry } from './network-registry.js';
@@ -40,6 +45,37 @@ export const registerNetworkRoutes: FastifyPluginAsync<NetworkRouteOptions> = as
     return NetworkDiscoveryListResponseSchema.parse(
       await options.networkDiscoveryService.list(),
     );
+  });
+
+  app.post('/discoveries/:discoveryNetworkId/import', async (request, reply) => {
+    const discoveryNetworkId = NetworkDiscoveryIdSchema.safeParse(
+      (request.params as { discoveryNetworkId?: unknown }).discoveryNetworkId,
+    );
+    if (!discoveryNetworkId.success) {
+      return reply.code(400).send({
+        error: 'invalid_network_discovery_id',
+        message: 'The network discovery id is invalid.',
+      });
+    }
+    const body = ImportNetworkDiscoveryRequestSchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        message: 'The network discovery import request is invalid.',
+        issues: body.error.issues,
+      });
+    }
+
+    try {
+      const manifest = await options.networkDiscoveryService.getImportableManifest(
+        discoveryNetworkId.data,
+      );
+      return reply.code(201).send(
+        await options.networkImportService.importDiscovered(manifest, body.data),
+      );
+    } catch (error) {
+      return sendNetworkError(error, reply);
+    }
   });
 
   app.post('/', async (request, reply) => {
@@ -209,6 +245,12 @@ function parseNetworkId(params: unknown, reply: FastifyReply): string | null {
 
 function sendNetworkError(error: unknown, reply: FastifyReply) {
   if (error instanceof NetworkImportError) {
+    return reply.code(error.statusCode).send({
+      error: error.code,
+      message: error.message,
+    });
+  }
+  if (error instanceof NetworkDiscoveryError) {
     return reply.code(error.statusCode).send({
       error: error.code,
       message: error.message,

@@ -6,10 +6,22 @@ import {
   NetworkDiscoveryManifestSchema,
   type NetworkDiscoveryCandidate,
   type NetworkDiscoveryListResponse,
+  type NetworkDiscoveryManifest,
 } from '@plus-fabric/shared';
 
 import type { RegisteredNetwork } from './network-driver.js';
 import type { NetworkRegistry } from './network-registry.js';
+
+export class NetworkDiscoveryError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = 'NetworkDiscoveryError';
+  }
+}
 
 export class NetworkDiscoveryService {
   constructor(
@@ -32,6 +44,37 @@ export class NetworkDiscoveryService {
       total: items.length,
       invalidManifestCount: manifests.invalidCount,
     });
+  }
+
+  async getImportableManifest(networkId: string): Promise<NetworkDiscoveryManifest> {
+    const discoveries = await this.list();
+    const matches = discoveries.items.filter(
+      (candidate) => candidate.manifest.networkId === networkId,
+    );
+    if (matches.length === 0) {
+      throw new NetworkDiscoveryError(
+        'network_discovery_not_found',
+        `No discovery manifest exists for network "${networkId}".`,
+        404,
+      );
+    }
+    if (matches.length > 1) {
+      throw new NetworkDiscoveryError(
+        'network_discovery_ambiguous',
+        `Multiple discovery manifests exist for network "${networkId}".`,
+        409,
+      );
+    }
+    const candidate = matches[0]!;
+    if (candidate.registrationStatus !== 'unregistered') {
+      throw new NetworkDiscoveryError(
+        'network_discovery_not_importable',
+        `The discovered network is ${candidate.registrationStatus} and cannot be imported.`,
+        409,
+      );
+    }
+    await this.assertWorkspaceManifest(candidate.manifest);
+    return candidate.manifest;
   }
 
   private async readManifests() {
@@ -108,6 +151,36 @@ export class NetworkDiscoveryService {
       workspaceAvailable,
       configAvailable,
     };
+  }
+
+  private async assertWorkspaceManifest(indexManifest: NetworkDiscoveryManifest): Promise<void> {
+    try {
+      const workspaceManifest = NetworkDiscoveryManifestSchema.parse(
+        JSON.parse(
+          await readFile(
+            path.join(indexManifest.workspaceRoot, '.plus-fabric', 'network.json'),
+            'utf8',
+          ),
+        ),
+      );
+      const fields: Array<keyof NetworkDiscoveryManifest> = [
+        'schemaVersion',
+        'networkId',
+        'workspaceRoot',
+        'configPath',
+        'composeProject',
+        'dockerNetwork',
+      ];
+      if (fields.some((field) => workspaceManifest[field] !== indexManifest[field])) {
+        throw new Error('manifest mismatch');
+      }
+    } catch {
+      throw new NetworkDiscoveryError(
+        'network_discovery_manifest_mismatch',
+        'The workspace discovery manifest is missing or does not match the discovery index.',
+        409,
+      );
+    }
   }
 }
 

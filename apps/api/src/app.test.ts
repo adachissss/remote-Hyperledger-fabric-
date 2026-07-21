@@ -219,36 +219,76 @@ test('network registry starts empty and never infers a local instance', async ()
   }
 });
 
-test('script discovery manifests are listed without being registered automatically', async () => {
+test('script discoveries require confirmation but can import without a global allowed root', async () => {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'plus-fabric-discovery-'));
   const discoveryRoot = path.join(temporaryRoot, 'discoveries');
   const workspaceRoot = path.join(temporaryRoot, 'cli-network');
   const configPath = path.join(workspaceRoot, 'config', 'orgs.yaml');
   mkdirSync(discoveryRoot, { recursive: true });
   mkdirSync(path.dirname(configPath), { recursive: true });
-  writeFileSync(configPath, 'network:\n  id: cli-network\n', 'utf8');
+  writeFileSync(
+    configPath,
+    `
+network:
+  id: cli-network
+  name: cli-network-docker
+  domain: cli-network.test
+  tls_enabled: true
+ordererOrg:
+  mspid: OrdererMSP
+  domain: cli-network.test
+  ca_url: https://localhost:41054
+  ca_name: cli-ca-orderer
+  nodes:
+    - name: orderer1
+      host: orderer1.cli-network.test
+      port: 41050
+peerOrgs:
+  - name: org1
+    mspid: Org1MSP
+    domain: org1.cli-network.test
+    ca_url: https://localhost:41154
+    ca_name: cli-ca-org1
+    peer_count: 1
+    anchor_peers:
+      - host: peer0.org1.cli-network.test
+        port: 41151
+channels:
+  - name: cli-channel
+    profile: ApplicationChannel
+    memberOrgs: [org1]
+`,
+    'utf8',
+  );
+  const manifest = {
+    schemaVersion: 1,
+    networkId: 'cli-network',
+    displayName: 'CLI Network',
+    source: 'script',
+    status: 'running',
+    workspaceRoot,
+    configPath,
+    composeProject: 'cli_network',
+    dockerNetwork: 'cli-network-docker',
+    fabricVersion: '2.4.1',
+    fabricCaVersion: '1.5.3',
+    summary: {
+      peerOrganizationCount: 1,
+      peerCount: 1,
+      ordererCount: 1,
+      channelCount: 1,
+    },
+    updatedAt: '2026-07-20T12:00:00.000Z',
+  } as const;
   writeFileSync(
     path.join(discoveryRoot, 'cli-network.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      networkId: 'cli-network',
-      displayName: 'CLI Network',
-      source: 'script',
-      status: 'running',
-      workspaceRoot,
-      configPath,
-      composeProject: 'cli_network',
-      dockerNetwork: 'cli-network-docker',
-      fabricVersion: '2.4.1',
-      fabricCaVersion: '1.5.3',
-      summary: {
-        peerOrganizationCount: 2,
-        peerCount: 4,
-        ordererCount: 3,
-        channelCount: 2,
-      },
-      updatedAt: '2026-07-20T12:00:00.000Z',
-    }),
+    JSON.stringify(manifest),
+    'utf8',
+  );
+  mkdirSync(path.join(workspaceRoot, '.plus-fabric'), { recursive: true });
+  writeFileSync(
+    path.join(workspaceRoot, '.plus-fabric', 'network.json'),
+    JSON.stringify(manifest),
     'utf8',
   );
   writeFileSync(path.join(discoveryRoot, 'invalid.json'), '{not-json', 'utf8');
@@ -271,6 +311,25 @@ test('script discovery manifests are listed without being registered automatical
 
     const networksResponse = await app.inject({ method: 'GET', url: '/api/v1/networks' });
     assert.equal(NetworkListResponseSchema.parse(networksResponse.json()).total, 0);
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/networks/discoveries/cli-network/import',
+      payload: { displayName: 'Imported from CLI' },
+    });
+    assert.equal(importResponse.statusCode, 201);
+    assert.equal(importResponse.json().id, 'cli-network');
+    assert.equal(importResponse.json().managementMode, 'imported');
+
+    const registeredResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/networks/discoveries',
+    });
+    const registeredDiscoveries = NetworkDiscoveryListResponseSchema.parse(
+      registeredResponse.json(),
+    );
+    assert.equal(registeredDiscoveries.items[0]?.registrationStatus, 'registered');
+    assert.equal(registeredDiscoveries.items[0]?.registeredNetworkId, 'cli-network');
   } finally {
     await app.close();
     rmSync(temporaryRoot, { recursive: true, force: true });

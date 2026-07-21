@@ -1,10 +1,14 @@
 import { realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import type {
-  ImportNetworkRequest,
-  NetworkSummary,
-  RedactedNetworkConfiguration,
+import {
+  ImportNetworkRequestSchema,
+  NetworkIdSchema,
+  type ImportNetworkRequest,
+  type ImportNetworkDiscoveryRequest,
+  type NetworkDiscoveryManifest,
+  type NetworkSummary,
+  type RedactedNetworkConfiguration,
 } from '@plus-fabric/shared';
 
 import {
@@ -42,6 +46,49 @@ export class NetworkImportService {
     const workspaceRoot = this.resolveWorkspaceRoot(request.workspaceRoot);
     const configPath = this.resolveConfigPath(workspaceRoot, request.configPath);
 
+    return this.importResolved(request, workspaceRoot, configPath);
+  }
+
+  async importDiscovered(
+    manifest: NetworkDiscoveryManifest,
+    overrides: ImportNetworkDiscoveryRequest,
+  ): Promise<NetworkSummary> {
+    const id = overrides.id ?? manifest.networkId;
+    if (!NetworkIdSchema.safeParse(id).success) {
+      throw new NetworkImportError(
+        'discovery_network_id_requires_override',
+        'The discovered network id is not valid for registration; provide a lowercase id override.',
+        400,
+      );
+    }
+
+    const workspaceRoot = this.resolveDiscoveredWorkspaceRoot(manifest.workspaceRoot);
+    const configPath = this.resolveDiscoveredConfigPath(workspaceRoot, manifest.configPath);
+    const request = ImportNetworkRequestSchema.safeParse({
+      id,
+      displayName: overrides.displayName ?? manifest.displayName,
+      driver: 'fabric-compose',
+      workspaceRoot,
+      configPath: path.relative(workspaceRoot, configPath),
+      composeProject: manifest.composeProject,
+      fabricVersion: manifest.fabricVersion,
+      fabricCaVersion: manifest.fabricCaVersion,
+    });
+    if (!request.success) {
+      throw new NetworkImportError(
+        'invalid_network_discovery_import',
+        'The discovery manifest contains values that cannot be registered.',
+        400,
+      );
+    }
+    return this.importResolved(request.data, workspaceRoot, configPath);
+  }
+
+  private async importResolved(
+    request: ImportNetworkRequest,
+    workspaceRoot: string,
+    configPath: string,
+  ): Promise<NetworkSummary> {
     if (await this.registry.get(request.id)) {
       throw new NetworkImportError(
         'network_exists',
@@ -189,6 +236,36 @@ export class NetworkImportService {
         'network_config_unavailable',
         'The managed network workspace is unavailable.',
         503,
+      );
+    }
+  }
+
+  private resolveDiscoveredWorkspaceRoot(requestedRoot: string): string {
+    try {
+      const workspaceRoot = realpathSync(path.resolve(requestedRoot));
+      if (!statSync(workspaceRoot).isDirectory()) throw new Error('not a directory');
+      return workspaceRoot;
+    } catch {
+      throw new NetworkImportError(
+        'discovery_workspace_unavailable',
+        'The discovered network workspace is unavailable.',
+        409,
+      );
+    }
+  }
+
+  private resolveDiscoveredConfigPath(workspaceRoot: string, requestedPath: string): string {
+    try {
+      const configPath = realpathSync(path.resolve(requestedPath));
+      if (!isWithin(workspaceRoot, configPath) || !statSync(configPath).isFile()) {
+        throw new Error('invalid discovered config path');
+      }
+      return configPath;
+    } catch {
+      throw new NetworkImportError(
+        'discovery_config_unavailable',
+        'The discovered network config is unavailable inside its workspace.',
+        409,
       );
     }
   }

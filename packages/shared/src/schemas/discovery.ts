@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import { NetworkIdSchema } from './network.js';
+
+export const NetworkDiscoveryIdSchema = z.string().trim().min(1).max(128);
+
 export const NetworkDiscoveryStatusSchema = z.enum([
   'configured',
   'running',
@@ -17,7 +21,7 @@ export const NetworkDiscoverySummarySchema = z.object({
 
 export const NetworkDiscoveryManifestSchema = z.object({
   schemaVersion: z.literal(1),
-  networkId: z.string().trim().min(1).max(128),
+  networkId: NetworkDiscoveryIdSchema,
   displayName: z.string().trim().min(1).max(200),
   source: z.literal('script'),
   status: NetworkDiscoveryStatusSchema,
@@ -52,6 +56,11 @@ export const NetworkDiscoveryListResponseSchema = z.object({
   invalidManifestCount: z.number().int().nonnegative(),
 });
 
+export const ImportNetworkDiscoveryRequestSchema = z.object({
+  id: NetworkIdSchema.optional(),
+  displayName: z.string().trim().min(1).max(100).optional(),
+});
+
 export type NetworkDiscoveryStatus = z.infer<typeof NetworkDiscoveryStatusSchema>;
 export type NetworkDiscoverySummary = z.infer<typeof NetworkDiscoverySummarySchema>;
 export type NetworkDiscoveryManifest = z.infer<typeof NetworkDiscoveryManifestSchema>;
@@ -60,3 +69,6 @@ export type NetworkDiscoveryRegistrationStatus = z.infer<
 >;
 export type NetworkDiscoveryCandidate = z.infer<typeof NetworkDiscoveryCandidateSchema>;
 export type NetworkDiscoveryListResponse = z.infer<typeof NetworkDiscoveryListResponseSchema>;
+export type ImportNetworkDiscoveryRequest = z.infer<
+  typeof ImportNetworkDiscoveryRequestSchema
+>;
