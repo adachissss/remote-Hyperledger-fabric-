@@ -4,6 +4,8 @@ import { ControlPlaneClient } from './api-client.js';
 
 export type JobFollowerOptions = {
   pollIntervalMs?: number;
+  pollRetryAttempts?: number;
+  pollRetryDelayMs?: number;
   reconnectDelayMs?: number;
   signal?: AbortSignal;
   onEvent(event: JobEvent): void;
@@ -18,9 +20,15 @@ export async function followJob(
 ): Promise<Job> {
   const controller = new AbortController();
   const abortFromParent = () => controller.abort(options.signal?.reason);
-  options.signal?.addEventListener('abort', abortFromParent, { once: true });
+  if (options.signal?.aborted) {
+    abortFromParent();
+  } else {
+    options.signal?.addEventListener('abort', abortFromParent, { once: true });
+  }
   let cursor = 0;
   let streamPromise: Promise<void> | null = null;
+  const pollRetryAttempts = Math.max(1, Math.floor(options.pollRetryAttempts ?? 3));
+  const pollRetryDelayMs = Math.max(0, options.pollRetryDelayMs ?? 500);
 
   const emit = (event: JobEvent) => {
     if (event.id <= cursor) return;
@@ -47,12 +55,27 @@ export async function followJob(
       if (controller.signal.aborted) throw abortError(controller.signal.reason);
       startStream();
 
-      const backlog = await client.getJobEvents(jobId, cursor);
+      const backlog = await retryControlPlaneRead(
+        () => client.getJobEvents(jobId, cursor),
+        pollRetryAttempts,
+        pollRetryDelayMs,
+        controller.signal,
+      );
       for (const event of backlog.items) emit(event);
 
-      const job = await client.getJob(jobId);
+      const job = await retryControlPlaneRead(
+        () => client.getJob(jobId),
+        pollRetryAttempts,
+        pollRetryDelayMs,
+        controller.signal,
+      );
       if (TERMINAL_JOB_STATUSES.has(job.status)) {
-        const finalBacklog = await client.getJobEvents(jobId, cursor);
+        const finalBacklog = await retryControlPlaneRead(
+          () => client.getJobEvents(jobId, cursor),
+          pollRetryAttempts,
+          pollRetryDelayMs,
+          controller.signal,
+        );
         for (const event of finalBacklog.items) emit(event);
         controller.abort();
         return job;
@@ -63,6 +86,24 @@ export async function followJob(
   } finally {
     controller.abort();
     options.signal?.removeEventListener('abort', abortFromParent);
+  }
+}
+
+async function retryControlPlaneRead<T>(
+  operation: () => Promise<T>,
+  attempts: number,
+  retryDelayMs: number,
+  signal: AbortSignal,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    if (signal.aborted) throw abortError(signal.reason);
+    try {
+      return await operation();
+    } catch (error) {
+      if (signal.aborted) throw abortError(signal.reason);
+      if (attempt >= attempts) throw error;
+      await delay(retryDelayMs, signal);
+    }
   }
 }
 

@@ -281,6 +281,15 @@ export async function consumeEventStream(
   const decoder = new TextDecoder();
   let buffer = '';
   let cursor = afterId;
+  const abortRead = () => {
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  };
+
+  if (signal?.aborted) {
+    abortRead();
+  } else {
+    signal?.addEventListener('abort', abortRead, { once: true });
+  }
 
   try {
     while (!signal?.aborted) {
@@ -300,6 +309,7 @@ export async function consumeEventStream(
       }
     }
   } finally {
+    signal?.removeEventListener('abort', abortRead);
     reader.releaseLock();
   }
   return cursor;
