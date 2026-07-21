@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.27.0",
   "scripts": {
     "dev": "pnpm --filter @plus-fabric/shared build && pnpm --parallel --filter @plus-fabric/api --filter @plus-fabric/web dev",
-    "pfctl": "pnpm --filter @plus-fabric/cli dev --",
+    "pfctl": "pnpm --filter @plus-fabric/cli dev",
     "build": "pnpm --filter @plus-fabric/shared build && pnpm --filter @plus-fabric/api build && pnpm --filter @plus-fabric/cli build && pnpm --filter @plus-fabric/web build",
     "test": "pnpm --filter @plus-fabric/shared build && pnpm -r --if-present test",
     "typecheck": "pnpm -r typecheck",
