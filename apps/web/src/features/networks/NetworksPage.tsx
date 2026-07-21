@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowRight, Boxes, Plus, ShieldAlert, X } from 'lucide-react';
+import type { NetworkDiscoveryCandidate } from '@plus-fabric/shared';
 import { Link } from 'react-router-dom';
 
 import { getNetworks, importNetwork } from '../../api/control-plane';
 import { Panel } from '../../components/Panel';
 import { ManagedNetworkDialog } from './ManagedNetworkDialog';
+import { NetworkDiscoveriesPanel } from './NetworkDiscoveriesPanel';
 import {
   getApiErrorMessage,
   getManagementModeLabel,
@@ -41,6 +43,7 @@ export function NetworksPage() {
     mutationFn: importNetwork,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['networks'] });
+      await queryClient.invalidateQueries({ queryKey: ['network-discoveries'] });
       setImportOpen(false);
       setForm({
         id: '',
@@ -71,6 +74,25 @@ export function NetworksPage() {
 
   const closeImportDialog = () => {
     if (!importMutation.isPending) setImportOpen(false);
+  };
+
+  const openImportDialog = (candidate?: NetworkDiscoveryCandidate) => {
+    importMutation.reset();
+    if (candidate) {
+      setForm({
+        id: normalizeNetworkId(candidate.manifest.networkId),
+        displayName: candidate.manifest.displayName,
+        workspaceRoot: candidate.manifest.workspaceRoot,
+        configPath: relativeConfigPath(
+          candidate.manifest.workspaceRoot,
+          candidate.manifest.configPath,
+        ),
+        composeProject: candidate.manifest.composeProject,
+        fabricVersion: candidate.manifest.fabricVersion ?? '',
+        fabricCaVersion: candidate.manifest.fabricCaVersion ?? '',
+      });
+    }
+    setImportOpen(true);
   };
 
   const trapDialogFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -127,10 +149,7 @@ export function NetworksPage() {
             ref={importButtonRef}
             className="secondary-action"
             type="button"
-            onClick={() => {
-              importMutation.reset();
-              setImportOpen(true);
-            }}
+            onClick={() => openImportDialog()}
           >
             <ArrowDownToLine size={16} /> 导入网络
           </button>
@@ -148,9 +167,11 @@ export function NetworksPage() {
       <div className="registry-notice">
         <ShieldAlert size={18} />
         <span>
-          仅允许从 API 管理员授权的工作区根目录导入网络。平台不会根据仓库或宿主机环境自动推断网络。
+          平台只读取 network.sh 写入的标准发现清单，不会自动注册或执行本地网络；导入仍需人工确认和路径校验。
         </span>
       </div>
+
+      <NetworkDiscoveriesPanel onImport={openImportDialog} />
 
       <Panel
         eyebrow="网络清单"
@@ -381,4 +402,22 @@ export function NetworksPage() {
       ) : null}
     </div>
   );
+}
+
+function relativeConfigPath(workspaceRoot: string, configPath: string): string {
+  const normalizedRoot = workspaceRoot.replace(/\/$/, '');
+  const prefix = `${normalizedRoot}/`;
+  return configPath.startsWith(prefix) ? configPath.slice(prefix.length) : 'config/orgs.yaml';
+}
+
+function normalizeNetworkId(value: string): string {
+  let normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!/^[a-z]/.test(normalized)) normalized = `network-${normalized}`;
+  normalized = normalized.slice(0, 64).replace(/-+$/g, '');
+  return normalized.length >= 3 ? normalized : `${normalized}-net`;
 }

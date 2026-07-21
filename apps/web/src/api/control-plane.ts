@@ -14,6 +14,7 @@ import {
   LedgerBlockSchema,
   LedgerChannelListResponseSchema,
   NetworkListResponseSchema,
+  NetworkDiscoveryListResponseSchema,
   NetworkNodeListResponseSchema,
   NetworkNodeSchema,
   RedactedNetworkConfigurationSchema,
@@ -35,6 +36,7 @@ import {
   type LedgerBlockListResponse,
   type LedgerChannelListResponse,
   type NetworkListResponse,
+  type NetworkDiscoveryListResponse,
   type NetworkNode,
   type NetworkNodeListResponse,
   type RedactedNetworkConfiguration,
@@ -88,6 +90,12 @@ export async function getSystemHealth(): Promise<HealthResponse> {
 
 export async function getNetworks(): Promise<NetworkListResponse> {
   return NetworkListResponseSchema.parse(await requestJson('/api/v1/networks'));
+}
+
+export async function getNetworkDiscoveries(): Promise<NetworkDiscoveryListResponse> {
+  return NetworkDiscoveryListResponseSchema.parse(
+    await requestJson('/api/v1/networks/discoveries'),
+  );
 }
 
 export async function importNetwork(request: ImportNetworkRequest): Promise<NetworkSummary> {
