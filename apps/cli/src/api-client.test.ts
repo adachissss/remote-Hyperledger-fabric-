@@ -70,3 +70,47 @@ test('creates lifecycle jobs through the existing network action route', async (
   assert.equal(requestedInit?.method, 'POST');
   assert.equal(requestedInit?.body, JSON.stringify({ confirmation: 'test-network' }));
 });
+
+test('reads local network discoveries through the shared response schema', async () => {
+  const client = new ControlPlaneClient('http://127.0.0.1:4100', async () =>
+    new Response(
+      JSON.stringify({
+        items: [
+          {
+            manifest: {
+              schemaVersion: 1,
+              networkId: 'cli-network',
+              displayName: 'CLI Network',
+              source: 'script',
+              status: 'running',
+              workspaceRoot: '/srv/fabric/cli-network',
+              configPath: '/srv/fabric/cli-network/config/orgs.yaml',
+              composeProject: 'cli_network',
+              dockerNetwork: 'cli-network-docker',
+              fabricVersion: '2.4.1',
+              fabricCaVersion: '1.5.3',
+              summary: {
+                peerOrganizationCount: 1,
+                peerCount: 2,
+                ordererCount: 3,
+                channelCount: 1,
+              },
+              updatedAt: '2026-07-21T00:00:00.000Z',
+            },
+            registrationStatus: 'unregistered',
+            registeredNetworkId: null,
+            workspaceAvailable: true,
+            configAvailable: true,
+          },
+        ],
+        total: 1,
+        invalidManifestCount: 0,
+      }),
+      { status: 200 },
+    ),
+  );
+
+  const response = await client.getNetworkDiscoveries();
+  assert.equal(response.items[0]?.manifest.networkId, 'cli-network');
+  assert.equal(response.items[0]?.registrationStatus, 'unregistered');
+});

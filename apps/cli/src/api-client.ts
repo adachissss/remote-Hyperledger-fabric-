@@ -7,6 +7,7 @@ import {
   JobListResponseSchema,
   JobSchema,
   NetworkListResponseSchema,
+  NetworkDiscoveryListResponseSchema,
   NetworkSummarySchema,
   type CreateManagedNetworkRequest,
   type HealthResponse,
@@ -16,6 +17,7 @@ import {
   type JobEventListResponse,
   type JobListResponse,
   type NetworkListResponse,
+  type NetworkDiscoveryListResponse,
   type NetworkScriptAction,
   type NetworkSummary,
 } from '@plus-fabric/shared';
@@ -58,6 +60,13 @@ export class ControlPlaneClient {
 
   getNetworks(): Promise<NetworkListResponse> {
     return this.request('/api/v1/networks', NetworkListResponseSchema);
+  }
+
+  getNetworkDiscoveries(): Promise<NetworkDiscoveryListResponse> {
+    return this.request(
+      '/api/v1/networks/discoveries',
+      NetworkDiscoveryListResponseSchema,
+    );
   }
 
   createManagedNetwork(request: CreateManagedNetworkRequest): Promise<NetworkSummary> {

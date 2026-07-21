@@ -4,6 +4,7 @@ import type {
   JobEvent,
   JobListResponse,
   NetworkListResponse,
+  NetworkDiscoveryListResponse,
   NetworkSummary,
 } from '@plus-fabric/shared';
 
@@ -49,6 +50,33 @@ export function printNetworks(
       String(network.nodeCount),
     ]),
   ));
+}
+
+export function printNetworkDiscoveries(
+  response: NetworkDiscoveryListResponse,
+  mode: OutputMode,
+  writer: OutputWriter,
+): void {
+  if (mode === 'json') return printJson(response, writer);
+  if (response.items.length === 0) {
+    writer.write('没有发现 network.sh 写入的本地网络痕迹。');
+    return;
+  }
+  writer.write(renderTable(
+    ['网络 ID', '脚本状态', '注册状态', '工作区', 'Peer', 'Orderer', '通道'],
+    response.items.map((candidate) => [
+      candidate.manifest.networkId,
+      candidate.manifest.status,
+      candidate.registrationStatus,
+      candidate.manifest.workspaceRoot,
+      String(candidate.manifest.summary.peerCount),
+      String(candidate.manifest.summary.ordererCount),
+      String(candidate.manifest.summary.channelCount),
+    ]),
+  ));
+  if (response.invalidManifestCount > 0) {
+    writer.error(`已忽略 ${response.invalidManifestCount} 份无效发现清单。`);
+  }
 }
 
 export function printNetwork(

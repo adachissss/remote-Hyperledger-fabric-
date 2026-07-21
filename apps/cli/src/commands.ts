@@ -17,6 +17,7 @@ import {
   printJobs,
   printJobStarted,
   printNetwork,
+  printNetworkDiscoveries,
   printNetworks,
   type OutputWriter,
 } from './output.js';
@@ -36,6 +37,15 @@ export async function runCommand(
 
   if (group === 'network' && action === 'list') {
     printNetworks(await client.getNetworks(), options.output, writer);
+    return;
+  }
+
+  if (group === 'network' && action === 'discover') {
+    printNetworkDiscoveries(
+      await client.getNetworkDiscoveries(),
+      options.output,
+      writer,
+    );
     return;
   }
 
