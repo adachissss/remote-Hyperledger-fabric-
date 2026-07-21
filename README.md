@@ -6,6 +6,7 @@
 
 - `docs/control-plane-architecture.md`
 - `docs/control-plane-roadmap.md`
+- `docs/dual-entry-control-plane.md`
 
 ## Control Plane 开发
 
@@ -26,6 +27,17 @@ pnpm dev
 pnpm check
 ```
 
+终端控制入口同样调用上述 API，不会在 CLI 中复制端口规划、配置生成或作业逻辑：
+
+```bash
+pnpm pfctl health
+pnpm pfctl network list
+pnpm pfctl network discover
+pnpm pfctl job list
+```
+
+默认连接 `http://127.0.0.1:4100`；可使用 `--api <url>` 或环境变量 `PLUS_FABRIC_API_URL` 覆盖。需要自动化消费时增加 `--json`。`pfctl` 是控制平面客户端，因此 API 必须运行；直接执行 `network.sh` 则不依赖 API。
+
 网络注册表默认从空状态启动，不会把仓库或宿主机上的网络自动注册为平台实例。SQLite 数据默认保存在 `runtime/control-plane/control-plane.sqlite`，该目录不会提交到 Git。
 
 导入已有网络前，管理员必须显式允许服务端工作区根目录；多个根目录使用逗号分隔：
@@ -34,7 +46,59 @@ pnpm check
 CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces pnpm dev
 ```
 
-控制台只接受允许目录内的真实路径和相对配置路径。未设置该变量时，浏览和健康检查仍可使用，但导入 API 会返回 `403`。
+普通手工导入只接受允许目录内的真实路径和相对配置路径。未设置该变量时，浏览和健康检查仍可使用，但普通导入 API 会返回 `403`。由本项目 `network.sh` 写入的标准发现清单可在 Web 或 CLI 中经用户确认后导入，无需加入全局允许根目录；后端仍会核验索引清单、工作区镜像清单、真实工作区、配置路径和注册表冲突。
+
+### pfctl 创建与运维
+
+`network create --file` 接受 YAML 或 JSON，并复用 Web 创建向导的共享 schema。例如：
+
+```yaml
+id: lab-network
+displayName: 实验网络
+domain: lab.example.com
+ordererCount: 3
+peerOrganizations:
+  - name: org1
+    mspId: Org1MSP
+    peerCount: 2
+  - name: org2
+    mspId: Org2MSP
+    peerCount: 1
+channels:
+  - name: business-channel
+    memberOrganizations: [org1, org2]
+preferredPortStart: null
+fabricVersion: 2.4.1
+fabricCaVersion: 1.5.3
+stateDatabase: leveldb
+ordererConfiguration:
+  consensusType: etcdraft
+  batchTimeoutSeconds: 2
+  maxMessageCount: 10
+  absoluteMaxBytesMiB: 99
+  preferredMaxBytesKiB: 512
+```
+
+```bash
+pnpm pfctl network create --file ./network.yaml
+pnpm pfctl network up lab-network
+pnpm pfctl network stop lab-network
+pnpm pfctl network restart lab-network
+pnpm pfctl network down lab-network --yes
+pnpm pfctl network delete lab-network --yes
+```
+
+生命周期命令默认持续显示 SSE 日志并查询作业终态；使用 `--detach` 只创建作业。退出码为成功 `0`、失败 `1`、取消 `2`、参数/API/协议错误 `3`。CLI 启动的作业会同时出现在 Web，Web 启动的作业也能通过 `pnpm pfctl job follow <job-id>` 跟随。
+
+直接执行脚本后，可由控制平面扫描并确认导入：
+
+```bash
+./network.sh up
+pnpm pfctl network discover
+pnpm pfctl network import-discovery <发现网络ID> --id <平台注册ID> --name <显示名称>
+```
+
+当脚本配置中的网络 ID 不符合平台要求的小写格式时，使用 `--id` 提供覆盖值。普通已有工作区仍可用 `network import --file <yaml-or-json>` 导入。
 
 导入包含可执行 `network.sh` 的工作区后，可以从网络详情的“运维”页面执行 `up`、`stop`、`restart` 和 `down`。控制平面会继续调用原脚本，并使用注册时保存的工作区、配置文件和 Compose project；原有命令行方式不受影响。作业步骤、退出码和实时日志保存在本地 SQLite 中，同一网络不会并发执行两个生命周期操作。
 
@@ -52,6 +116,8 @@ CONTROL_PLANE_ALLOWED_NETWORK_ROOTS=/srv/fabric-networks,/opt/fabric-workspaces 
 - 托管网络独立工作区、Docker network、Compose project、容器/卷命名空间和宿主机端口规划；
 - 多网络注册、配置、拓扑和节点运行状态查看；
 - `network.sh` 生命周期作业、SQLite 记录、SSE 实时日志、取消和网络级互斥；
+- Web 与 `pfctl` 双入口共享 API、配置生成、端口规划、作业和注册表，CLI 支持 YAML/JSON、JSON 输出与作业退出码；
+- 本地脚本网络通过双份发现清单和 Docker 资源标签留下痕迹，可在 Web/CLI 中查看状态并确认导入；
 - 目标化网络清理与彻底删除，回收链码残留容器、Docker network、注册端口和托管工作区；
 - 动态通道发现、账本高度、区块分页和 Fabric protobuf 明文解析；
 - 已安装包与已提交链码清单、通用部署作业以及 evaluate/submit 执行台；
@@ -117,6 +183,8 @@ cp config/orgs.example.yaml config/orgs.yaml
 `up` 会依次生成 CA、组织证书、Compose、通道配置和 Peer `core.yaml`，再启动节点并将配置中的 Orderer 与 Peer 加入各自通道。
 
 托管网络则从各自的 `runtime/networks/<network-id>` 工作区执行同一组命令。`network.sh` 会以脚本所在目录作为工作区，默认拒绝读取工作区外的配置；仅在明确需要兼容外部配置时才可设置 `ALLOW_EXTERNAL_CONFIG_FILE=true`。
+
+`up`、`stop`、`restart`、`down` 成功后还会更新 `<workspace>/.plus-fabric/network.json` 和 `${PLUS_FABRIC_DISCOVERY_ROOT:-$HOME/.plus-fabric/discovery/networks}/<network-id>.json`。清单只包含工作区、配置、Compose/Docker 命名空间、拓扑摘要和最后成功状态，不包含密码或私钥；API 恢复后即可发现这些脚本操作痕迹。
 
 ## 链码
 

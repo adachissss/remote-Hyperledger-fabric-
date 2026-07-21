@@ -7,6 +7,7 @@
 - [x] 明确架构、API 边界和安全边界；
 - [x] 建立 pnpm workspace；
 - [x] 建立 `apps/api`、`apps/web`、`packages/shared`；
+- [x] 建立 `apps/cli`，让终端入口复用共享 schema 和控制平面 API；
 - [x] 定义通用 Network Registry、Network Driver 和 Chaincode Catalog 接口；
 - [x] API/Web health check；
 - [x] 环境配置校验、统一 test/typecheck/build；
@@ -23,7 +24,7 @@
 - [x] 创建由平台管理的网络；
 - [x] 网络配置、拓扑和节点 API/路由以 `networkId` 为第一维；
 - [x] 解析每个网络脱敏后的配置；
-- [ ] 封装 `export-network-info.sh`；
+- [x] 后端直接解析 `config/orgs.yaml`、Compose 配置与 Docker 状态，无需依赖文本导出脚本；
 - [x] Docker 容器状态、镜像、IP、端口和时间；
 - [x] Peer、Orderer 与 CA 主服务端口的 TCP 可达性探测及降级展示；
 - [x] Fleet Overview、URL 驱动的 Network Selector、Topology 和 Nodes 页面；
@@ -51,6 +52,10 @@
 - [x] 彻底删除网络，回收链码 builder/runtime 残留、注册端口和 managed workspace，保留 imported workspace 与作业历史；
 - [x] 网络级锁、超时、取消、异常重启恢复和本地作业记录；
 - [x] Operations 页面、步骤状态与实时日志控制台。
+- [x] `pfctl` 网络创建、导入、查询、生命周期和作业命令，支持 YAML/JSON、`--json` 与 `--detach`；
+- [x] CLI 通过 SSE 与 JSON 历史共同跟随作业，支持事件去重、断线补偿、有限重试和终态退出码；
+- [x] `network.sh` 成功状态写入工作区/用户双份发现清单，并为网络、节点和卷增加归属标签；
+- [x] Web/CLI 展示本地脚本发现状态，并经用户确认导入；普通手工导入继续受 allowed roots 约束；
 
 验收：浏览器发起部署后可以看到完整步骤、实时日志和最终状态；重复点击不会并发破坏同一网络。
 
