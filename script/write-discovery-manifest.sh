@@ -52,13 +52,16 @@ WORKSPACE_MANIFEST_DIR="${PROJECT_ROOT}/.plus-fabric"
 DISCOVERY_ROOT="${PLUS_FABRIC_DISCOVERY_ROOT:-${HOME:-${PROJECT_ROOT}/runtime}/.plus-fabric/discovery/networks}"
 WORKSPACE_MANIFEST="${WORKSPACE_MANIFEST_DIR}/network.json"
 INDEX_MANIFEST="${DISCOVERY_ROOT}/${NETWORK_ID}.json"
+MANIFEST_SOURCE=""
+WORKSPACE_TEMPORARY_FILE=""
+INDEX_TEMPORARY_FILE=""
 
-write_manifest() {
+cleanup() {
+  rm -f "$MANIFEST_SOURCE" "$WORKSPACE_TEMPORARY_FILE" "$INDEX_TEMPORARY_FILE"
+}
+
+render_manifest() {
   local target="$1"
-  local target_dir temporary_file
-  target_dir="$(dirname "$target")"
-  mkdir -p "$target_dir"
-  temporary_file="$(mktemp "${target}.tmp.XXXXXX")"
   jq -n \
     --argjson schemaVersion 1 \
     --arg networkId "$NETWORK_ID" \
@@ -94,12 +97,32 @@ write_manifest() {
         channelCount: $channelCount
       },
       updatedAt: $updatedAt
-    }' > "$temporary_file"
+    }' > "$target"
+  chmod 600 "$target"
+}
+
+stage_manifest() {
+  local source="$1"
+  local target="$2"
+  local result_variable="$3"
+  local temporary_file
+  temporary_file="$(mktemp "${target}.tmp.XXXXXX")"
+  cp "$source" "$temporary_file"
   chmod 600 "$temporary_file"
-  mv "$temporary_file" "$target"
+  printf -v "$result_variable" '%s' "$temporary_file"
 }
 
 umask 077
-write_manifest "$WORKSPACE_MANIFEST"
-write_manifest "$INDEX_MANIFEST"
+mkdir -p "$WORKSPACE_MANIFEST_DIR" "$DISCOVERY_ROOT"
+trap cleanup EXIT
+
+MANIFEST_SOURCE="$(mktemp "${WORKSPACE_MANIFEST_DIR}/network.json.source.XXXXXX")"
+render_manifest "$MANIFEST_SOURCE"
+stage_manifest "$MANIFEST_SOURCE" "$WORKSPACE_MANIFEST" WORKSPACE_TEMPORARY_FILE
+stage_manifest "$MANIFEST_SOURCE" "$INDEX_MANIFEST" INDEX_TEMPORARY_FILE
+
+mv "$WORKSPACE_TEMPORARY_FILE" "$WORKSPACE_MANIFEST"
+WORKSPACE_TEMPORARY_FILE=""
+mv "$INDEX_TEMPORARY_FILE" "$INDEX_MANIFEST"
+INDEX_TEMPORARY_FILE=""
 echo "$WORKSPACE_MANIFEST"
