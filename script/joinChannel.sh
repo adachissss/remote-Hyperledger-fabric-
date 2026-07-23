@@ -148,6 +148,11 @@ main() {
   log_debug "循环结束,total=$total, success=$success"
   log_info "通道加入完成！成功 $success / $total 个 Peer"
 
+  if (( total == 0 || success != total )); then
+    log_error "通道 $CHANNEL_NAME 加入不完整"
+    return 1
+  fi
+
 }
 
 main

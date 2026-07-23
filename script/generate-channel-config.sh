@@ -14,6 +14,7 @@ fi
 : "${CONFIGTX_YAML:="${PROJECT_ROOT}/config/configtx.yaml"}"
 
 source "${SCRIPT_DIR}/lib/fabric-ca-lib.sh"
+source "${SCRIPT_DIR}/lib/fabric-version.sh"
 
 CHANNEL_ARTIFACTS="${PROJECT_ROOT}/channel-artifacts"
 mkdir -p "$CHANNEL_ARTIFACTS"
@@ -39,7 +40,7 @@ BATCH_MAX_MESSAGE_COUNT=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.max
 BATCH_ABSOLUTE_MAX_BYTES_MIB=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.absolute_max_bytes_mib // 99')
 BATCH_PREFERRED_MAX_BYTES_KIB=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.batch_size.preferred_max_bytes_kib // 512')
 ORDERER_NODE_COUNT=$(echo "$ORDERER_CONFIG" | "$YQ_BIN" -r '.nodes | length')
-FABRIC_VERSION=$(get_config_value_raw '.network.fabric_version // "2.4.1"')
+FABRIC_VERSION=$(get_config_value_raw ".network.fabric_version // \"${PLUS_FABRIC_DEFAULT_FABRIC_VERSION}\"")
 
 validate_integer_range() {
   local label="$1"

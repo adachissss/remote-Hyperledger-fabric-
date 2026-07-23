@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const DEFAULT_FABRIC_VERSION = '3.1.5';
+export const DEFAULT_FABRIC_CA_VERSION = '1.5.21';
+
 export const NetworkIdSchema = z
   .string()
   .min(3)
@@ -88,7 +91,7 @@ export const ManagedImageTagSchema = z
   .max(128)
   .regex(
     /^\d+\.\d+\.\d+(?:[-.][A-Za-z0-9.-]+)?$/,
-    'Use an explicit semantic version such as 2.4.1.',
+    `Use an explicit semantic version such as ${DEFAULT_FABRIC_VERSION}.`,
   );
 
 export const FabricStateDatabaseSchema = z.enum(['leveldb', 'couchdb']);
@@ -166,7 +169,7 @@ export const CreateManagedNetworkRequestSchema = z
           message: 'Solo consensus requires exactly one orderer.',
         });
       }
-      const fabricMajor = Number((value.fabricVersion ?? '2.4.1').split('.')[0]);
+      const fabricMajor = Number((value.fabricVersion ?? DEFAULT_FABRIC_VERSION).split('.')[0]);
       if (fabricMajor >= 3) {
         context.addIssue({
           code: 'custom',

@@ -936,7 +936,7 @@ channels:
       assert.equal(
         concurrentManagedResponses.find((response) => response.statusCode === 201)?.json()
           .fabricVersion,
-        '2.4.1',
+        '3.1.5',
       );
       const defaultManagedConfig = readFileSync(
         path.join(
@@ -948,8 +948,8 @@ channels:
         ),
         'utf8',
       );
-      assert.match(defaultManagedConfig, /fabric_version: 2\.4\.1/);
-      assert.match(defaultManagedConfig, /fabric_ca_version: 1\.5\.3/);
+      assert.match(defaultManagedConfig, /fabric_version: 3\.1\.5/);
+      assert.match(defaultManagedConfig, /fabric_ca_version: 1\.5\.21/);
       assert.match(defaultManagedConfig, /remove_docker_network_on_down: true/);
       assert.match(defaultManagedConfig, /consensus_type: etcdraft/);
       assert.match(defaultManagedConfig, /batch_timeout_seconds: 2/);
@@ -998,6 +998,20 @@ channels:
       });
       assert.equal(fabricThreeSoloResponse.statusCode, 400);
       assert.equal(fabricThreeSoloResponse.json().error, 'invalid_managed_network');
+
+      const defaultFabricSoloResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/networks',
+        payload: {
+          ...concurrentManagedPayload,
+          id: 'default-fabric-solo-network',
+          displayName: 'Default Fabric Solo Network',
+          domain: 'default-fabric-solo.test',
+          ordererConfiguration: { consensusType: 'solo' },
+        },
+      });
+      assert.equal(defaultFabricSoloResponse.statusCode, 400);
+      assert.equal(defaultFabricSoloResponse.json().error, 'invalid_managed_network');
 
       const invalidBatchSizeResponse = await app.inject({
         method: 'POST',

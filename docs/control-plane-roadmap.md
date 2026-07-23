@@ -43,6 +43,7 @@
 - [x] Web 中文创建向导、自动端口规划和指定起始端口；
 - [x] 可选 CouchDB 状态数据库、每 Peer 独立数据卷、端口规划及 CouchDB 节点拓扑；
 - [x] etcdraft/Solo 共识约束及 BatchSize/BatchTimeout 参数；
+- [x] Fabric 3.1.5 / Fabric CA 1.5.21 默认工具链、Docker 29 链码构建兼容和语言运行镜像预检；
 - [ ] Raft 细节、日志级别和更多节点启动参数；
 - [x] 按注册工作区、配置路径和 Compose project 调用原脚本，并保留原脚本命令入口；
 - [x] 无 Shell 拼接的子进程执行器与基础日志脱敏；

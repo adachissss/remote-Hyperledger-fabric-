@@ -89,6 +89,7 @@ cd "$PROJECT_ROOT"
 
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
 source "${PROJECT_ROOT}/script/lib/fabric-ca-lib.sh"
+source "${PROJECT_ROOT}/script/lib/fabric-version.sh"
 
 if [[ ! -f "./script/setGlobals.sh" ]]; then
   error "未找到 setGlobals.sh，请确认脚本在 Fabric 项目根目录执行"
@@ -145,6 +146,28 @@ if [[ -z "$SIGNATURE_POLICY" ]]; then
   SIGNATURE_POLICY="OutOf(${REQUIRED}, $(IFS=', '; echo "${POLICY_MEMBERS[*]}"))"
 fi
 
+setGlobals "${ORGS[0]}"
+
+FABRIC_VERSION=$(get_config_value_raw ".network.fabric_version // \"${PLUS_FABRIC_DEFAULT_FABRIC_VERSION}\"")
+CHAINCODE_RUNTIME_TAG=$(fabric_chaincode_runtime_version "$FABRIC_VERSION")
+BUILDER_IMAGE="hyperledger/fabric-ccenv:${FABRIC_VERSION}"
+case "$CHAINCODE_LANG" in
+  node) RUNTIME_IMAGE="hyperledger/fabric-nodeenv:${CHAINCODE_RUNTIME_TAG}" ;;
+  golang) RUNTIME_IMAGE="hyperledger/fabric-baseos:${FABRIC_VERSION}" ;;
+  java) RUNTIME_IMAGE="hyperledger/fabric-javaenv:${CHAINCODE_RUNTIME_TAG}" ;;
+esac
+
+ensure_chaincode_image() {
+  local image="$1"
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    info "正在准备链码镜像: $image"
+    docker pull "$image"
+  fi
+}
+
+ensure_chaincode_image "$BUILDER_IMAGE"
+ensure_chaincode_image "$RUNTIME_IMAGE"
+
 PKG_FILE="${CHAINCODE_NAME}_${VERSION}.tar.gz"
 LABEL="${CHAINCODE_NAME}_${VERSION}"
 
@@ -180,7 +203,9 @@ for ORG in "${ORGS[@]}"; do
   setGlobals "$ORG"
 
   echo "安装链码到 $ORG ..."
-  peer lifecycle chaincode install "$PKG_FILE" || echo "链码可能已安装，继续执行"
+  if ! peer lifecycle chaincode install "$PKG_FILE"; then
+    echo "链码安装命令失败，检查是否已有相同标签的已安装包..." >&2
+  fi
 
   echo "获取 package ID ..."
   PKG_ID=$(peer lifecycle chaincode queryinstalled | grep "$LABEL" | sed -n 's/^Package ID: //; s/, Label:.*$//p')

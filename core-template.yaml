@@ -8,6 +8,14 @@ peer:
   localMspId: {{MSP_ID}}
   mspConfigPath: /etc/hyperledger/fabric/peers/{{PEER_ID}}/msp
 
+  BCCSP:
+    Default: SW
+    SW:
+      Hash: SHA2
+      Security: 256
+      FileKeyStore:
+        KeyStore:
+
   tls:
     enabled: true
     cert:
@@ -40,15 +48,15 @@ chaincode:
     path: ""
 
   # 链码构建器配置
-  builder: hyperledger/fabric-ccenv:2.4
+  builder: {{CHAINCODE_BUILDER_IMAGE}}
 
   # 链码运行时镜像
   golang:
-    runtime: hyperledger/fabric-baseos:2.4
+    runtime: {{CHAINCODE_GO_RUNTIME_IMAGE}}
   java:
-    runtime: hyperledger/fabric-javaenv:2.4
+    runtime: {{CHAINCODE_JAVA_RUNTIME_IMAGE}}
   node:
-    runtime: hyperledger/fabric-nodeenv:2.4
+    runtime: {{CHAINCODE_NODE_RUNTIME_IMAGE}}
 
   # 外部构建器配置
   externalBuilders: []
@@ -125,15 +133,6 @@ vm:
         - Name: "nofile"
           Soft: 65536
           Hard: 65536
-
-# BCCSP 配置
-bccsp:
-  default: SW
-  sw:
-    hash: SHA2
-    security: 256
-    filekeystore:
-      keystore: /var/hyperledger/production/msp/keystore
 
 # Ledger 配置
 ledger:

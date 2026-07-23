@@ -15,10 +15,17 @@ ROOT_DIR="${PROJECT_ROOT}/organizations/peerOrganizations"
 SNAPSHOT_ROOT_DIR="/var/hyperledger/production/snapshots"
 
 source "${PROJECT_ROOT}/script/lib/fabric-ca-lib.sh"
+source "${PROJECT_ROOT}/script/lib/fabric-version.sh"
 
 FABRIC_NET_ID=$(get_config_value_raw '.network.id')
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
+FABRIC_VERSION=$(get_config_value_raw ".network.fabric_version // \"${PLUS_FABRIC_DEFAULT_FABRIC_VERSION}\"")
+CHAINCODE_RUNTIME_TAG=$(fabric_chaincode_runtime_version "$FABRIC_VERSION")
+CHAINCODE_BUILDER_IMAGE="hyperledger/fabric-ccenv:${FABRIC_VERSION}"
+CHAINCODE_GO_RUNTIME_IMAGE="hyperledger/fabric-baseos:${FABRIC_VERSION}"
+CHAINCODE_JAVA_RUNTIME_IMAGE="hyperledger/fabric-javaenv:${CHAINCODE_RUNTIME_TAG}"
+CHAINCODE_NODE_RUNTIME_IMAGE="hyperledger/fabric-nodeenv:${CHAINCODE_RUNTIME_TAG}"
 
 get_peer_port() {
     local org_name="$1" peer_index="$2" field="$3" default_offset="$4"
@@ -97,6 +104,10 @@ main() {
                 -e "s#{{TLS_CA_PATH}}#/etc/hyperledger/fabric/peers/${peer_host}/tls/ca.crt#g" \
                 -e "s#{{NETWORK_ID}}#${FABRIC_NET_ID}#g" \
                 -e "s#{{DOCKER_NETWORK}}#${FABRIC_DOCKER_NET}#g" \
+                -e "s#{{CHAINCODE_BUILDER_IMAGE}}#${CHAINCODE_BUILDER_IMAGE}#g" \
+                -e "s#{{CHAINCODE_GO_RUNTIME_IMAGE}}#${CHAINCODE_GO_RUNTIME_IMAGE}#g" \
+                -e "s#{{CHAINCODE_JAVA_RUNTIME_IMAGE}}#${CHAINCODE_JAVA_RUNTIME_IMAGE}#g" \
+                -e "s#{{CHAINCODE_NODE_RUNTIME_IMAGE}}#${CHAINCODE_NODE_RUNTIME_IMAGE}#g" \
                 -e "s#{{SNAPSHOT_ROOT_DIR}}#${SNAPSHOT_ROOT_DIR}#g" \
                 -e "s#{{STATE_DATABASE}}#${core_state_database}#g" \
                 -e "s#{{COUCHDB_ADDRESS}}#${couchdb_address}#g" \

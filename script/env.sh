@@ -15,6 +15,13 @@ ORDERER_HOST=$(get_config_value_raw '.ordererOrg.nodes[0].host')
 ORDERER_PORT=$(get_config_value_raw '.ordererOrg.nodes[0].port')
 ORDERER_ADMIN_PORT=$(get_config_value_raw '.ordererOrg.nodes[0].admin_port // (.ordererOrg.nodes[0].port + 3)')
 
+case ",${NO_PROXY:-}," in
+  *,".${ORDERER_DOMAIN}",*) ;;
+  *) NO_PROXY="${NO_PROXY:+${NO_PROXY},}.${ORDERER_DOMAIN}" ;;
+esac
+export NO_PROXY
+export no_proxy="$NO_PROXY"
+
 export ORDERER_CA="${PROJECT_ROOT}/organizations/ordererOrganizations/${ORDERER_DOMAIN}/orderers/${ORDERER_HOST}/tls/ca.crt"
 export ORDERER_ADDRESS="${ORDERER_HOST}:${ORDERER_PORT}"
 export FABRIC_CFG_PATH="${PROJECT_ROOT}/config"

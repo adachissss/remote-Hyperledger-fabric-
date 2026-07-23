@@ -10,6 +10,7 @@ fi
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
 
 source "${SCRIPT_DIR}/lib/fabric-ca-lib.sh"
+source "${SCRIPT_DIR}/lib/fabric-version.sh"
 
 OUTPUT_FILE="${PROJECT_ROOT}/docker/docker-compose-ca.yaml"
 CA_INTERNAL_PORT=7054
@@ -107,7 +108,7 @@ FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
 FABRIC_NET_ID=$(get_config_value_raw '.network.id')
 FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
-FABRIC_CA_IMAGE_TAG=$(get_config_value_raw '.network.fabric_ca_version // "latest"')
+FABRIC_CA_IMAGE_TAG=$(get_config_value_raw ".network.fabric_ca_version // \"${PLUS_FABRIC_DEFAULT_FABRIC_CA_VERSION}\"")
 NAMESPACE_CONTAINERS=$(get_config_value_raw '.network.namespace_containers // false')
 if [[ "$NAMESPACE_CONTAINERS" == "true" ]]; then
   CA_CONTAINER_PREFIX="${FABRIC_NET_PREFIX}-"

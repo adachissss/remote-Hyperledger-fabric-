@@ -12,6 +12,7 @@ fi
 : "${CONFIG_FILE:="${PROJECT_ROOT}/config/orgs.yaml"}"
 
 source "${SCRIPT_DIR}/lib/fabric-ca-lib.sh"
+source "${SCRIPT_DIR}/lib/fabric-version.sh"
 
 OUTPUT_FILE="${PROJECT_ROOT}/docker/docker-compose-peers.yaml"
 
@@ -91,7 +92,8 @@ FABRIC_NET_PREFIX=$(get_config_value_raw '.network.env_prefix')
 FABRIC_DOCKER_NET=$(get_config_value_raw '.network.name')
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(get_config_value_raw '.network.compose_project // .network.id')}"
 FABRIC_NET_PORT=$(get_config_value_raw '.network.network_port__start // 0')
-FABRIC_IMAGE_TAG=$(get_config_value_raw '.network.fabric_version // "latest"')
+FABRIC_IMAGE_TAG=$(get_config_value_raw ".network.fabric_version // \"${PLUS_FABRIC_DEFAULT_FABRIC_VERSION}\"")
+CHAINCODE_RUNTIME_TAG=$(fabric_chaincode_runtime_version "$FABRIC_IMAGE_TAG")
 STATE_DATABASE=$(get_config_value_raw '.network.state_database // "leveldb"')
 COUCHDB_IMAGE=$(get_config_value_raw '.network.couchdb_image // "couchdb:3.3.3"')
 
@@ -229,6 +231,9 @@ ${COUCHDB_PEER_SETTINGS}
       # 链码配置
       - CORE_CHAINCODE_MODE=net
       - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:${FABRIC_IMAGE_TAG}
+      - CORE_CHAINCODE_GOLANG_RUNTIME=hyperledger/fabric-baseos:${FABRIC_IMAGE_TAG}
+      - CORE_CHAINCODE_JAVA_RUNTIME=hyperledger/fabric-javaenv:${CHAINCODE_RUNTIME_TAG}
+      - CORE_CHAINCODE_NODE_RUNTIME=hyperledger/fabric-nodeenv:${CHAINCODE_RUNTIME_TAG}
       - CORE_CHAINCODE_EXECUTETIMEOUT=180s
       - CORE_CHAINCODE_INSTALLTIMEOUT=180s
       - CORE_CHAINCODE_STARTUPTIMEOUT=180s

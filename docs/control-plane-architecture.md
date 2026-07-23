@@ -137,7 +137,7 @@ interface NetworkDriver {
 - 创建或导入时检查宿主机端口冲突；
 - 证书、channel artifacts、日志和临时区块文件只存在于对应工作区；
 - 锁按 `networkId` 隔离，不同网络的作业可以并行；
-- Fabric/CA 版本属于网络定义；平台默认使用 Fabric `2.4.1` 和 Fabric CA `1.5.3`，每个网络可以显式覆盖，并拒绝 `latest` 等漂移标签。
+- Fabric/CA 版本属于网络定义；平台默认使用 Fabric `3.1.5` 和 Fabric CA `1.5.21`，每个网络可以显式覆盖，并拒绝 `latest` 等漂移标签。Fabric 3.x 的 Node/Java 链码运行时按官方兼容矩阵固定使用 `2.5` 系列；部署前由宿主机显式准备 ccenv 与对应语言运行镜像，避免 Peer 在安装事务中隐式拉取超时。
 
 当前 managed network 创建链路已经实现基础拓扑参数化：Peer 组织数量、每组织 Peer 数、Orderer 数量、多个通道、通道成员、LevelDB/CouchDB 状态数据库，以及 Orderer 共识和批次参数均由共享 schema 校验后写入独立工作区。端口规划器为 Orderer gRPC/admin/operations、CA、Peer gRPC/chaincode/metrics，以及启用时每个 Peer 对应的 CouchDB HTTP 服务分配完整区间，并同时排除注册表保留端口和宿主机监听端口。
 

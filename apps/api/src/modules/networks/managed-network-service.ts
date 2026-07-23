@@ -5,7 +5,12 @@ import { constants } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 
-import type { CreateManagedNetworkRequest, NetworkSummary } from '@plus-fabric/shared';
+import {
+  DEFAULT_FABRIC_CA_VERSION,
+  DEFAULT_FABRIC_VERSION,
+  type CreateManagedNetworkRequest,
+  type NetworkSummary,
+} from '@plus-fabric/shared';
 import { stringify as stringifyYaml } from 'yaml';
 
 import {
@@ -26,8 +31,6 @@ import {
 } from './managed-port-planner.js';
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_FABRIC_VERSION = '2.4.1';
-const DEFAULT_FABRIC_CA_VERSION = '1.5.3';
 const MANAGED_SCRIPT_FILES = [
   'connection-file-generation.sh',
   'docker-ip-hosts-Mapping.sh',
@@ -43,6 +46,7 @@ const MANAGED_SCRIPT_FILES = [
   'install-fabric-tools.sh',
   'joinChannel.sh',
   'lib/fabric-ca-lib.sh',
+  'lib/fabric-version.sh',
   'osnadmin-examples.sh',
   'setGlobals.sh',
   'update-docker-compose-networks.sh',

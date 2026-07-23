@@ -1,7 +1,7 @@
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { CreateManagedNetworkRequestSchema } from '@plus-fabric/shared';
+import { CreateManagedNetworkRequestSchema, DEFAULT_FABRIC_VERSION } from '@plus-fabric/shared';
 import { useMutation } from '@tanstack/react-query';
 import { Boxes, Database, GitBranch, Network, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
 
@@ -80,7 +80,9 @@ export function ManagedNetworkDialog({
   const couchdbNodeCount = identity.stateDatabase === 'couchdb' ? peerCount : 0;
   const reservedPortCount =
     ordererCount * 3 + organizations.length + 1 + peerCount * 3 + couchdbNodeCount;
-  const configuredFabricMajor = Number((identity.fabricVersion || '2.4.1').split('.')[0]);
+  const configuredFabricMajor = Number(
+    (identity.fabricVersion || DEFAULT_FABRIC_VERSION).split('.')[0],
+  );
   const soloUnavailable = ordererCount !== 1 || configuredFabricMajor >= 3;
 
   useEffect(() => {

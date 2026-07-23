@@ -22,6 +22,7 @@ setGlobals() {
 
   ORG_MSPID=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${ORG}\") | .mspid")
   ORG_DOMAIN=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${ORG}\") | .domain")
+  NETWORK_DOMAIN=$(get_config_value_raw '.network.domain // .ordererOrg.domain')
   PEER_HOST=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${ORG}\") | .anchor_peers[0].host")
   PEER_PORT=$(get_config_value_raw ".peerOrgs[] | select(.name == \"${ORG}\") | .anchor_peers[0].port")
 
@@ -35,6 +36,16 @@ setGlobals() {
   export CORE_PEER_MSPCONFIGPATH=${PROJECT_ROOT}/organizations/peerOrganizations/${FABRIC_NET_PREFIX}-${ORG_DOMAIN}/users/Admin@${FABRIC_NET_PREFIX}-${ORG_DOMAIN}/msp
   export CORE_PEER_ADDRESS=${PEER_HOST}:${PEER_PORT}
   export FABRIC_CFG_PATH=${PROJECT_ROOT}/organizations/peerOrganizations/${FABRIC_NET_PREFIX}-${ORG_DOMAIN}/peers/${PEER_HOST}
+  case ",${NO_PROXY:-}," in
+    *,".${ORG_DOMAIN}",*) ;;
+    *) NO_PROXY="${NO_PROXY:+${NO_PROXY},}.${ORG_DOMAIN}" ;;
+  esac
+  case ",${NO_PROXY}," in
+    *,".${NETWORK_DOMAIN}",*) ;;
+    *) NO_PROXY="${NO_PROXY},.${NETWORK_DOMAIN}" ;;
+  esac
+  export NO_PROXY
+  export no_proxy="$NO_PROXY"
   debug "切换到 $ORG"
 
   success "环境变量已设置: $ORG ($CORE_PEER_ADDRESS)"
