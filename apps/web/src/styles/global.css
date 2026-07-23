@@ -237,8 +237,15 @@ a {
 }
 
 .workspace {
+  --workspace-font-body: 15px;
+  --workspace-font-copy: 13px;
+  --workspace-font-small: 12px;
+  --workspace-font-micro: 10px;
+  --workspace-font-code: 11px;
+  --workspace-font-field: 14px;
   grid-column: 2;
   min-width: 0;
+  font-size: var(--workspace-font-body);
 }
 
 .topbar {
@@ -3547,6 +3554,134 @@ button:disabled {
 .contract-result details code { display: block; margin-top: 6px; color: var(--faint); font-size: 7px; overflow-wrap: anywhere; }
 .chaincode-job-workbench { min-height: 400px; }
 .chaincode-state { min-height: 420px; padding: 30px; background: rgba(255, 255, 255, 0.7); border: 1px solid var(--line); }
+
+/* The operational workspace uses a readable type floor without loosening the sidebar. */
+.workspace .topbar-title,
+.workspace .hero p,
+.workspace .page-heading p {
+  font-size: var(--workspace-font-copy);
+}
+
+.workspace .eyebrow,
+.workspace .topbar-status,
+.workspace .text-link,
+.workspace .primary-action,
+.workspace .secondary-action,
+.workspace .node-filters button,
+.workspace .network-detail-tabs a,
+.workspace .network-detail-tabs button {
+  font-size: var(--workspace-font-micro);
+}
+
+.workspace .metric-card p,
+.workspace .empty-registry p,
+.workspace .network-table-empty p,
+.workspace .timeline-empty p,
+.workspace .runtime-notice,
+.workspace .discovery-console__warning,
+.workspace .chaincode-form-intro,
+.workspace .chaincode-empty span {
+  font-size: var(--workspace-font-small);
+}
+
+.workspace .discovery-row__identity strong,
+.workspace .network-row__identity strong {
+  font-size: var(--workspace-font-body);
+}
+
+.workspace .discovery-row__identity code,
+.workspace .discovery-row__workspace code,
+.workspace .discovery-row__identity span,
+.workspace .discovery-row__workspace span,
+.workspace .discovery-row__workspace small,
+.workspace .discovery-row__state small,
+.workspace .network-row__identity span,
+.workspace .network-row__runtime,
+.workspace .network-row dd {
+  font-size: var(--workspace-font-code);
+}
+
+.workspace .discovery-row__topology dt,
+.workspace .network-row dt,
+.workspace .node-inventory__identity small,
+.workspace .node-inventory__org small,
+.workspace .node-inventory__image,
+.workspace .node-runtime-detail dt,
+.workspace .node-endpoints > span {
+  font-size: var(--workspace-font-micro);
+}
+
+.workspace .discovery-row__state,
+.workspace .node-inventory__identity strong,
+.workspace .node-inventory__org strong,
+.workspace .node-runtime-detail dd,
+.workspace .node-runtime-detail__warning,
+.workspace .node-state-label {
+  font-size: var(--workspace-font-small);
+}
+
+.workspace .import-form label > span,
+.workspace .managed-network-form label > span,
+.workspace .chaincode-form label > span,
+.workspace .endorsement-targets > span {
+  font-size: var(--workspace-font-micro);
+}
+
+.workspace .import-form label > small,
+.workspace .managed-network-form label > small {
+  font-size: var(--workspace-font-small);
+}
+
+.workspace input,
+.workspace select,
+.workspace textarea {
+  font-size: var(--workspace-font-field);
+}
+
+.workspace .chaincode-form textarea,
+.workspace .contract-result pre,
+.workspace .ledger-value pre {
+  font-size: var(--workspace-font-code);
+}
+
+.workspace .execution-mode button,
+.workspace .endorsement-targets label span,
+.workspace .contract-result > header strong,
+.workspace .contract-result > header span,
+.workspace .contract-result__tx span,
+.workspace .contract-result__tx code,
+.workspace .contract-result details summary,
+.workspace .contract-result details code {
+  font-size: var(--workspace-font-micro);
+}
+
+.workspace .ledger-block-facts dt,
+.workspace .ledger-transaction-facts dt,
+.workspace .ledger-transaction-heading > span,
+.workspace .ledger-transaction > summary small,
+.workspace .ledger-transaction > summary em,
+.workspace .ledger-action > header div > span,
+.workspace .ledger-action > header .ledger-response-status,
+.workspace .ledger-section-title span,
+.workspace .ledger-argument > span,
+.workspace .ledger-state-group > span,
+.workspace .ledger-value__meta,
+.workspace .ledger-value details summary,
+.workspace .ledger-value details code,
+.workspace .ledger-endorsements span,
+.workspace .ledger-event span {
+  font-size: var(--workspace-font-micro);
+}
+
+.workspace .ledger-block-facts dd,
+.workspace .ledger-transaction-facts dd,
+.workspace .ledger-transaction > summary strong,
+.workspace .ledger-action > header strong,
+.workspace .ledger-section-title strong,
+.workspace .ledger-response-message,
+.workspace .ledger-event strong {
+  font-size: var(--workspace-font-small);
+}
 
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(12px); }
